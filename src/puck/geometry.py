@@ -110,7 +110,8 @@ def clockwise_pt(rectangle: Polygon, reference: Point) -> Point:
     return clockwise_pt
 
 
-def ordered_rectangle(rectangle: Polygon, reference: Point) -> Polygon:
+def ordered_rectangle(rectangle: Polygon, reference: Point) -> tuple[Polygon, list[int]]:
+    # TODO: Refactor to avoid cheatsy-doodle-method
     """Orders the points that make up a rectangle by going clockwise through them,
     starting with the given reference point.
     """
@@ -122,6 +123,8 @@ def ordered_rectangle(rectangle: Polygon, reference: Point) -> Polygon:
     ordered.insert(2, clockwise_pt(rectangle, ordered[1]))
     ordered.insert(0, reference)
 
+    # cheatsy-doodle-method
+    new_order= [list(rectangle).index(i) for i in ordered]
     # Double check we haven't assigned the same point multiple times
     assert len(set(ordered)) == 4
-    return Polygon(ordered)
+    return Polygon(ordered), new_order

@@ -160,40 +160,45 @@ def detect_paper_tags(
     """
     april_tag_detector = cv.aruco.ArucoDetector(dictionary=DICT)
     tags, ids, _ = april_tag_detector.detectMarkers(frame)
-    assert ids is not None
-
-    # Check for invalid/bad ids
-    bad_indices = [i for i in range(len(ids)) if ids[i] > APRIL_LIMIT]
-    if len(bad_indices) > 0:
-        # Save problematic frame
-        bad_ids = [ids[i] for i in bad_indices]
-        logger.warning(f"Invalid AprilTag Value(s): {bad_ids} detected")
-        copy = cv.aruco.drawDetectedMarkers(frame, tags, ids)
-        cv.imwrite(f"invalid_AprilTag_{datetime.now().isoformat()}.png", copy)
-
-    # Assemble required data in lists, filtering out any bad IDs
-    ids_list = [int(ids[i]) for i in range(len(ids)) if i not in bad_indices]
-    tag_shapes: list[Polygon] = [
-        Polygon.from_array(tags[i][0])
-        for i in range(len(tag_shapes))
-        if i not in bad_indices
-    ]
-    transformed_tag_shapes = [
-        transform_shape(shape, homography_matrix) for shape in tag_shapes
-    ]
-    assert len(ids_list) == len(transformed_tag_shapes)
-
-    if len(ids_list) == 4:
-        averaged_paper = Polygon(
-            [average_pt(shape) for shape in transformed_tag_shapes]
-        )
-
-        # TODO: Allow for multiple papers.
-        ids_list = [int(i) for i in list(ids)]
-        return [(averaged_paper, ids_list)]
-    else:
+    if ids is None:
         return []
+    else:
+        # Check for invalid/bad ids
+        bad_indices = [i for i in range(len(ids)) if ids[i] > APRIL_LIMIT]
+        if len(bad_indices) > 0:
+            # Save problematic frame
+            bad_ids = [ids[i] for i in bad_indices]
+            logger.warning(f"Invalid AprilTag Value(s): {bad_ids} detected")
+            copy = cv.aruco.drawDetectedMarkers(frame, tags, ids)
+            cv.imwrite(f"invalid_AprilTag_{datetime.now().isoformat()}.png", copy)
 
+        # Assemble required data in lists, filtering out any bad IDs
+        ids_list = [int(ids[i]) for i in range(len(ids)) if i not in bad_indices]
+        tag_shapes: list[Polygon] = [
+            Polygon.from_array(tags[i][0])
+            for i in range(len(tags))
+            if i not in bad_indices
+        ]
+        transformed_tag_shapes = [
+            transform_shape(shape, homography_matrix) for shape in tag_shapes
+        ]
+
+        assert len(ids_list) == len(transformed_tag_shapes)
+
+        if len(ids_list) == 4:
+            averaged_paper = Polygon(
+                [average_pt(shape) for shape in transformed_tag_shapes]
+            )
+            ordered_averaged_paper, indices = ordered_rectangle(averaged_paper, averaged_paper[0])
+
+
+            # TODO: Allow for multiple papers.
+            ids_list = [int(i) for i in list(ids)]
+            ordered_ids_list = [ids_list[i] for i in indices]
+
+            return [(ordered_averaged_paper, ordered_ids_list)]
+        else:
+            return []
 
 def tags_to_paper_encoding(tags: list[int]) -> int | None:
     """Transforms the 4 AprilTags IDs on a paper into that paper's encoding.
@@ -221,6 +226,8 @@ def tags_to_paper_encoding(tags: list[int]) -> int | None:
     # Reorder based on the position of the APRIL_LIMIT tag
     pos = tags.index(APRIL_LIMIT)
     ordered_tags = tags[pos + 1 :] + tags[:pos]
+    print(f"Unordered Tags: {tags}")
+    print(f"Ordered Tags: {ordered_tags}")
 
     # Convert into int by using tags as base-APRIL_LIMIT digits
     program_encoding = sum(
@@ -347,7 +354,6 @@ def update(
         program_encoding = tags_to_paper_encoding(tags)
         if program_encoding:
             logger.debug(f"Saw program encoding, {program_encoding}")
-            coords = ordered_rectangle(coords, coords[0])
             create_and_update_actors(
                 program_encoding,
                 coords,
