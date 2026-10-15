@@ -30,7 +30,7 @@ def logging_setup(log: bool, log_level: int) -> None:
 def run_calibration(
     log: bool = False,
     log_level: int = 0,
-):
+) -> None:
     print("Hello from calibration!")
     logging_setup(True, 0)
     calibration_info = calibrate()
