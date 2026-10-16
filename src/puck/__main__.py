@@ -170,10 +170,14 @@ def detect_paper_tags(
             bad_ids = [ids[i] for i in bad_indices]
             logger.warning(f"Invalid AprilTag Value(s): {bad_ids} detected")
             copy = cv.aruco.drawDetectedMarkers(frame, tags, ids)
-            cv.imwrite(f"invalid_AprilTag_{datetime.now().isoformat()}.png", copy)
+            cv.imwrite(
+                f"invalid_AprilTag_{datetime.now().isoformat()}.png", copy
+            )
 
         # Assemble required data in lists, filtering out any bad IDs
-        ids_list = [int(ids[i]) for i in range(len(ids)) if i not in bad_indices]
+        ids_list = [
+            int(ids[i]) for i in range(len(ids)) if i not in bad_indices
+        ]
         tag_shapes: list[Polygon] = [
             Polygon.from_array(tags[i][0])
             for i in range(len(tags))
@@ -189,8 +193,9 @@ def detect_paper_tags(
             averaged_paper = Polygon(
                 [average_pt(shape) for shape in transformed_tag_shapes]
             )
-            ordered_averaged_paper, indices = ordered_rectangle(averaged_paper, averaged_paper[0])
-
+            ordered_averaged_paper, indices = ordered_rectangle(
+                averaged_paper, averaged_paper[0]
+            )
 
             # TODO: Allow for multiple papers.
             ids_list = [int(i) for i in list(ids)]
@@ -199,6 +204,7 @@ def detect_paper_tags(
             return [(ordered_averaged_paper, ordered_ids_list)]
         else:
             return []
+
 
 def tags_to_paper_encoding(tags: list[int]) -> int | None:
     """Transforms the 4 AprilTags IDs on a paper into that paper's encoding.
@@ -267,6 +273,7 @@ def create_and_update_actors(
 
     t.send(PaperLocationMessage(current_coords))
 
+
 def draw(drawing_queue: Queue[Message], canvas: Canvas) -> None:
     """Draws the commands on the drawing queue onto the canvas."""
     if not drawing_queue.empty():  # TODO: change to 'while'
@@ -274,7 +281,7 @@ def draw(drawing_queue: Queue[Message], canvas: Canvas) -> None:
         logger.debug(f"draw loop got message {message}")
 
         assert type(message) is DrawingQueueMessage
-        
+
         match message:
             case AddPolygonMessage(sender, shape):
                 fill = "white"

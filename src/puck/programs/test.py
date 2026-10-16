@@ -2,7 +2,14 @@ import logging
 
 # Relative import of the Actor class.
 from ..actor import Actor
-from ..messages import AddPolygonMessage, DrawingQueueReferenceMessage, PaperLocationMessage, KillMessage, CanvasIdMessage, UpdatePolygonMessage
+from ..messages import (
+    AddPolygonMessage,
+    DrawingQueueReferenceMessage,
+    PaperLocationMessage,
+    KillMessage,
+    CanvasIdMessage,
+    UpdatePolygonMessage,
+)
 
 # Every file has a logger.
 logger = logging.getLogger(__name__)
@@ -22,7 +29,8 @@ def run(self: Actor) -> None:
     drawing_queue = first_message.drawing_queue
 
     # These are lists that are for this actor to hold onto whatever graphical objects and actors it spawns off.
-    paper_highlight_shape_id: int | None = None # TODO: use sentinels in future Python?
+    # TODO: use sentinels in future Python?
+    paper_highlight_shape_id: int | None = None
     spawned_actors: list[Actor] = []
 
     # Handle incoming messages
@@ -37,7 +45,11 @@ def run(self: Actor) -> None:
                 if paper_highlight_shape_id is None:
                     drawing_queue.put(AddPolygonMessage(self, paper_location))
                 else:
-                    drawing_queue.put(UpdatePolygonMessage(self, paper_highlight_shape_id, paper_location))
+                    drawing_queue.put(
+                        UpdatePolygonMessage(
+                            self, paper_highlight_shape_id, paper_location
+                        )
+                    )
             case CanvasIdMessage(canvas_id):
                 # This is the id Tkinter has assigned to our paper shape
                 paper_highlight_shape_id = canvas_id

@@ -140,7 +140,7 @@ def calibrate(debug: bool = True) -> CalibrationInfo:
             calibration.
     """
     # TODO: refactor to handle exceptions and return types more gracefully. Possibility of returning None?
-    
+
     logger.info("Running calibration tool")
 
     homography = None
@@ -195,7 +195,9 @@ def calibrate(debug: bool = True) -> CalibrationInfo:
     # Stretch the projected-light signal to the full display range. Camera
     # exposure, projector brightness, and surface reflectance make a fixed
     # threshold unreliable across different hardware.
-    difference_normalized = np.zeros(shape=difference.shape, dtype=difference.dtype)
+    difference_normalized = np.zeros(
+        shape=difference.shape, dtype=difference.dtype
+    )
     difference_normalized = cv2.normalize(
         difference,
         difference_normalized,
@@ -307,9 +309,7 @@ def calibrate(debug: bool = True) -> CalibrationInfo:
             "Camera-to-projector homography:\n%s",
             np.array2string(homography, precision=8, suppress_small=True),
         )
-        logger.info(
-            "Homography inliers: %d/%d", inliers.sum(), len(inliers)
-        )
+        logger.info("Homography inliers: %d/%d", inliers.sum(), len(inliers))
         logger.info(
             "Mean inlier reprojection error: %.3f projector pixels",
             reprojection_errors[inliers].mean(),
@@ -329,6 +329,6 @@ def calibrate(debug: bool = True) -> CalibrationInfo:
                 break
 
     return CalibrationInfo(
-        camera_to_projector_homography=homography, 
+        camera_to_projector_homography=homography,
         background_frame=background_frame,
     )
