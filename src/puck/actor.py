@@ -20,13 +20,16 @@ Example:
     drawing_actor.start()
 """
 
+from collections.abc import Callable
+from queue import Queue
 from threading import Thread
 from typing import Self
-from queue import Queue
+
+from .messages import KillMessage, Message
 
 
 class Actor(Thread):
-    def __init__(self, target):
+    def __init__(self, target: Callable[[Self], None]):
         """Initialises an actor.
 
         Args:
@@ -36,19 +39,18 @@ class Actor(Thread):
             mailbox: a queue which other actors and the main thread can send messages to.
         """
         super().__init__(target=target, args=(self,))
-        self.mailbox: Queue = Queue()
+        self.mailbox: Queue[Message] = Queue()
 
-    def send(self, message) -> None:
+    def send(self, message: Message) -> None:
         self.mailbox.put(message)
 
-    def recieve(self):
-        """Read messages that are in the mailbox.
+    def recieve(self) -> Message:
+        """Get the first message from the mailbox.
 
-        Returns:
-            obj: whatever the message is, completely arbitrary object.
+        If the mailbox is empty, this hangs until a message exists.
         """
         return self.mailbox.get()
 
     def end(self) -> None:
         """Sends the 'kill' message to its own mailbox."""
-        self.send("kill")
+        self.send(KillMessage())
