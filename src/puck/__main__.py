@@ -16,11 +16,11 @@ import typer
 from datetime import datetime
 from numpy.typing import NDArray
 
-
 # Local packages and modules
 from .geometry import Point, Polygon, ordered_rectangle
 from .actor import Actor
 from .calibration.calibrate import calibrate
+from .messages import *
 
 # Global variables
 logger = logging.getLogger(__name__)
@@ -244,7 +244,7 @@ def create_and_update_actors(
     current_coords: Polygon,
     encoding_to_actor: dict[str, Actor],
     program_lookup: list[str],
-    drawing_queue: Queue,
+    drawing_queue: Queue[Message],
 ) -> None:
     """Creates or updates Actors associated with a given program encoding"""
     if program_encoding >= len(program_lookup) or program_encoding < 0:
@@ -257,77 +257,41 @@ def create_and_update_actors(
     module_name = "puck.programs." + program_lookup[program_encoding]
     module = importlib.import_module(module_name)
 
-    if t := encoding_to_actor.get(str(program_encoding)):
-        # This program is already running
-        # TODO: the id isn't used at the moment
-        t.send(("update_shape", ("id", 0), ("coordinates", current_coords)))
-    else:
+    if not (t := encoding_to_actor.get(str(program_encoding))):
         # This program is not yet running
         t = Actor(target=module.run)
         encoding_to_actor[str(program_encoding)] = t
         t.start()
         # TODO: pass as environment on construction instead
-        t.send(("drawing_queue", drawing_queue))
-        t.send(
-            (
-                "new_shape",
-                ("type", "rectangle"),
-                ("coordinates", current_coords),
-            )
-        )
+        t.send(DrawingQueueReferenceMessage(drawing_queue))
 
+    t.send(PaperLocationMessage(current_coords))
 
-def draw(drawing_queue: Queue, canvas: Canvas) -> None:
+def draw(drawing_queue: Queue[Message], canvas: Canvas) -> None:
     """Draws the commands on the drawing queue onto the canvas."""
     if not drawing_queue.empty():  # TODO: change to 'while'
         message = drawing_queue.get()
         logger.debug(f"draw loop got message {message}")
 
-        assert message != "kill"
+        assert type(message) is DrawingQueueMessage
+        
         match message:
-            case (
-                "action",
-                _ as action,
-            ):
-                match action:
-                    case (
-                        "new",
-                        ("type", type),
-                        ("sender", sender),
-                        ("coordinates", coordinates),
-                    ):
-                        assert type == "rectangle" or type == "polygon"
-                        outline = "blue"
-                        fill = "white"
-                        width = 2
-                        id = canvas.create_polygon(
-                            coordinates.unwrap(),
-                            fill=fill,
-                            outline=outline,
-                            width=width,
-                        )
-                        sender.send(("information", ("add_ids", [id])))
-                    case ("new", *invalid_new):
-                        print(
-                            f"You have provided me this message, {invalid_new},"
-                            "to create a new graphical object, but I'm not sure what type of object. \n "
-                            "It would help if you specified the type of object you want to add."
-                        )
-                    case (
-                        "update",
-                        ("id", id),
-                        ("coordinates", coordinates),
-                        *further_info,
-                    ):
-                        canvas.coords(id, coordinates.unwrap())
-                    case _ as invalid_action:
-                        print(
-                            f"You have provided an invalid action message, '{invalid_action}' is not an action I understand"
-                        )
-            case _ as invalid_message:
-                print(
-                    f"You have provided an invalid message, '{invalid_message}' is not a message I understand"
+            case AddPolygonMessage(sender, shape):
+                fill = "white"
+                outline = "blue"
+                width = 2
+                canvas_id = canvas.create_polygon(
+                    shape.unwrap(),
+                    fill=fill,
+                    outline=outline,
+                    width=width,
                 )
+                sender.send(CanvasIdMessage(canvas_id))
+            case UpdatePolygonMessage(_, shape_id, shape):
+                canvas.coords(shape_id, shape.flat_unwrap())
+            case _:
+                logger.error(f"Unexpected message {message}")
+
         logger.debug("drawing loop finished")
     canvas.pack()
 
@@ -336,7 +300,7 @@ def update(
     cam: cv.VideoCapture,
     encoding_to_actor: dict[str, Actor],
     program_lookup: list[str],
-    drawing_queue: Queue,
+    drawing_queue: Queue[Message],
     canvas: Canvas,
     window_name: str,
     homography_matrix: np.ndarray,
@@ -405,7 +369,7 @@ def start_puck(
     program_lookup = load_program_names(program_lookup_file)
     encoding_to_actor: dict[str, Actor] = {}
     canvas = canvas_setup(base)
-    drawing_queue: Queue = Queue()
+    drawing_queue: Queue[Message] = Queue()
     cam = camera_setup(camera_id)
     camera_perspective_window_setup(CAMERA_PERSPECTIVE_WINDOW_NAME)
     calibration_info = calibrate()

@@ -43,6 +43,10 @@ class Polygon:
     def unwrap(self) -> list[tuple[int, int]]:
         return [(x, y) for x, y in self.points]
 
+    def flat_unwrap(self) -> list[int]:
+        """Returns all points as a list of the form [x1, y1, x2, y2, ...]"""
+        return list(sum(self.unwrap(), ()))
+
     @classmethod
     def from_array(cls, array: np.ndarray) -> Polygon:
         points = [Point(int(item[0]), int(item[1])) for item in array]

@@ -16,7 +16,7 @@ class KillMessage(Message):
 
 @dataclass
 class DrawingQueueMessage(Message):
-    pass
+    sender: Actor
 
 @dataclass
 class PaperLocationMessage(Message):

@@ -35,9 +35,9 @@ def run(self: Actor) -> None:
             case PaperLocationMessage(paper_location):
                 # Highlight the paper in white
                 if paper_highlight_shape_id is None:
-                    drawing_queue.put(AddPolygonMessage(paper_location))
+                    drawing_queue.put(AddPolygonMessage(self, paper_location))
                 else:
-                    drawing_queue.put(UpdatePolygonMessage(paper_highlight_shape_id, paper_location))
+                    drawing_queue.put(UpdatePolygonMessage(self, paper_highlight_shape_id, paper_location))
             case CanvasIdMessage(canvas_id):
                 # This is the id Tkinter has assigned to our paper shape
                 paper_highlight_shape_id = canvas_id
