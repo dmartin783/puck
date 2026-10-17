@@ -359,6 +359,9 @@ def start_puck(
 ) -> None:
     """Runs the puck recognition system"""
 
+    log = True
+    camera_id = 1
+
     # Generic print to make sure that everything is working
     print("Hello from puck!")
     logging_setup(log, log_level)
