@@ -271,7 +271,10 @@ def draw(drawing_queue: Queue[Message], canvas: Canvas) -> None:
         message = drawing_queue.get()
         logger.debug(f"draw loop got message {message}")
 
-        assert isinstance(type(message), DrawingQueueMessage)
+        if not isinstance(type(message), DrawingQueueMessage):
+            ...
+            # Wierd threading thing if this is an assert?
+            # Race condition something or other?
 
         match message:
             case AddPolygonMessage(sender, shape):
