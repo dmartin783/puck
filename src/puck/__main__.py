@@ -271,7 +271,7 @@ def draw(drawing_queue: Queue[Message], canvas: Canvas) -> None:
         message = drawing_queue.get()
         logger.debug(f"draw loop got message {message}")
 
-        assert type(message) is DrawingQueueMessage
+        assert isinstance(type(message), DrawingQueueMessage)
 
         match message:
             case AddPolygonMessage(sender, shape):
