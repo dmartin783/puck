@@ -3,7 +3,7 @@ from enum import Enum
 from queue import Queue
 from typing import Any
 
-from .actor import Actor
+lazy from .actor import Actor
 from .geometry import Polygon
 
 
