@@ -1,5 +1,5 @@
 # Setup tkinter early (necessary on MacOS).
-from tkinter import Tk, Canvas
+from tkinter import Canvas, Tk
 
 base = Tk()
 
@@ -7,19 +7,20 @@ base = Tk()
 import importlib
 import json
 import logging
+from datetime import datetime
 from queue import Queue
 
 # External packages
 import cv2 as cv
 import numpy as np
 import typer
-from datetime import datetime
 from numpy.typing import NDArray
+
+from .actor import Actor
+from .calibration.calibrate import calibrate
 
 # Local packages and modules
 from .geometry import Point, Polygon, ordered_rectangle
-from .actor import Actor
-from .calibration.calibrate import calibrate
 from .messages import *
 
 # Global variables
@@ -74,9 +75,7 @@ def canvas_setup(base: Tk) -> Canvas:
     Args:
         base: an instance of Tk(), also commonly referred to as "root".
     """
-    canvas = Canvas(
-        base, height=CANVAS_HEIGHT, width=CANVAS_WIDTH, background="black"
-    )
+    canvas = Canvas(base, height=CANVAS_HEIGHT, width=CANVAS_WIDTH, background="black")
 
     # Allows canvas to be seen by the user.
     canvas.pack()
@@ -170,14 +169,10 @@ def detect_paper_tags(
             bad_ids = [ids[i] for i in bad_indices]
             logger.warning(f"Invalid AprilTag Value(s): {bad_ids} detected")
             copy = cv.aruco.drawDetectedMarkers(frame, tags, ids)
-            cv.imwrite(
-                f"invalid_AprilTag_{datetime.now().isoformat()}.png", copy
-            )
+            cv.imwrite(f"invalid_AprilTag_{datetime.now().isoformat()}.png", copy)
 
         # Assemble required data in lists, filtering out any bad IDs
-        ids_list = [
-            int(ids[i]) for i in range(len(ids)) if i not in bad_indices
-        ]
+        ids_list = [int(ids[i]) for i in range(len(ids)) if i not in bad_indices]
         tag_shapes: list[Polygon] = [
             Polygon.from_array(tags[i][0])
             for i in range(len(tags))
@@ -236,9 +231,7 @@ def tags_to_paper_encoding(tags: list[int]) -> int | None:
     print(f"Ordered Tags: {ordered_tags}")
 
     # Convert into int by using tags as base-APRIL_LIMIT digits
-    program_encoding = sum(
-        tag * APRIL_LIMIT**i for i, tag in enumerate(ordered_tags)
-    )
+    program_encoding = sum(tag * APRIL_LIMIT**i for i, tag in enumerate(ordered_tags))
     assert type(program_encoding) is int
 
     logger.debug(f"Raw id: {tags} to interpreted id: {program_encoding}")
@@ -254,9 +247,7 @@ def create_and_update_actors(
 ) -> None:
     """Creates or updates Actors associated with a given program encoding"""
     if program_encoding >= len(program_lookup) or program_encoding < 0:
-        print(
-            f"There is no associated program with the encoding: {program_encoding}"
-        )
+        print(f"There is no associated program with the encoding: {program_encoding}")
         return
 
     # TODO: use this to load modules dynamically
@@ -377,14 +368,12 @@ def start_puck(
     encoding_to_actor: dict[str, Actor] = {}
     canvas = canvas_setup(base)
     drawing_queue: Queue[Message] = Queue()
+    calibration_info = calibrate()
     cam = camera_setup(camera_id)
     camera_perspective_window_setup(CAMERA_PERSPECTIVE_WINDOW_NAME)
-    calibration_info = calibrate()
     homography_matrix = calibration_info.camera_to_projector_homography
     if homography_matrix.all() == None:
-        logger.fatal(
-            msg="Homography Matrix failed to generate, nothing will work."
-        )
+        logger.fatal(msg="Homography Matrix failed to generate, nothing will work.")
 
     # Start the main update loop soons
     base.after(
