@@ -1,5 +1,5 @@
-from dataclasses import dataclass
 import logging
+from dataclasses import dataclass
 
 import cv2
 import numpy as np
@@ -7,7 +7,6 @@ from numpy.typing import NDArray
 from screeninfo import Monitor, get_monitors
 
 from .chessboard import make_chessboard
-
 
 logger = logging.getLogger(__name__)
 
@@ -155,13 +154,11 @@ def calibrate(debug: bool = True) -> CalibrationInfo:
     )
 
     # The fullscreen helper initially displays black.
-    black_screen = np.zeros(
-        (projector.height, projector.width, 3), dtype=np.uint8
-    )
+    black_screen = np.zeros((projector.height, projector.width, 3), dtype=np.uint8)
 
     # camera
     logger.info("Setting up camera")
-    camera = cv2.VideoCapture(0)
+    camera = cv2.VideoCapture(1)
     if not camera.isOpened():
         raise RuntimeError("Could not open camera")
 
@@ -195,9 +192,7 @@ def calibrate(debug: bool = True) -> CalibrationInfo:
     # Stretch the projected-light signal to the full display range. Camera
     # exposure, projector brightness, and surface reflectance make a fixed
     # threshold unreliable across different hardware.
-    difference_normalized = np.zeros(
-        shape=difference.shape, dtype=difference.dtype
-    )
+    difference_normalized = np.zeros(shape=difference.shape, dtype=difference.dtype)
     difference_normalized = cv2.normalize(
         difference,
         difference_normalized,
@@ -223,9 +218,7 @@ def calibrate(debug: bool = True) -> CalibrationInfo:
     )
     print(difference_normalized)
     detector_flags = (
-        cv2.CALIB_CB_NORMALIZE_IMAGE
-        | cv2.CALIB_CB_EXHAUSTIVE
-        | cv2.CALIB_CB_ACCURACY
+        cv2.CALIB_CB_NORMALIZE_IMAGE | cv2.CALIB_CB_EXHAUSTIVE | cv2.CALIB_CB_ACCURACY
     )
     # The raw camera frame contains the surface and ambient scene. Detect on
     # the background-subtracted projection first, with the raw frame only as
@@ -268,9 +261,7 @@ def calibrate(debug: bool = True) -> CalibrationInfo:
         # findChessboardCornersSB already returns sub-pixel corner positions.
         if debug:
             display_image = gray_chessboard.copy()
-            cv2.drawChessboardCorners(
-                display_image, corner_shape, corners, ret
-            )
+            cv2.drawChessboardCorners(display_image, corner_shape, corners, ret)
             cv2.imshow(WINDOW_CHESSBOARD, display_image)
 
         # Compute a mapping from camera-image coordinates to projector
@@ -291,9 +282,7 @@ def calibrate(debug: bool = True) -> CalibrationInfo:
         )
 
         if homography is None or inlier_mask is None:
-            raise RuntimeError(
-                "Could not compute the camera-to-projector homography"
-            )
+            raise RuntimeError("Could not compute the camera-to-projector homography")
 
         mapped_points = cv2.perspectiveTransform(
             camera_points.reshape(-1, 1, 2),
