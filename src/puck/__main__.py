@@ -17,7 +17,7 @@ import typer
 from numpy.typing import NDArray
 
 from .actor import Actor
-from .calibration.calibrate import calibrate
+from .calibration.calibrate import CalibrationInfo, calibrate
 
 # Local packages and modules
 from .geometry import Point, Polygon, ordered_rectangle
@@ -157,8 +157,11 @@ def detect_paper_tags(
     Returns:
         A list of papers and their associated list of four tags
     """
+    logger.debug("detecting paper tags")
+
     april_tag_detector = cv.aruco.ArucoDetector(dictionary=DICT)
     tags, ids, _ = april_tag_detector.detectMarkers(frame)
+    logger.debug(f"{ids = }")
     if ids is None:
         return []
     else:
@@ -244,6 +247,8 @@ def create_and_update_actors(
     encoding_to_actor: dict[str, Actor],
     program_lookup: list[str],
     drawing_queue: Queue[Message],
+    homography_matrix: np.ndarray,
+    frame: np.ndarray,
 ) -> None:
     """Creates or updates Actors associated with a given program encoding"""
     if program_encoding >= len(program_lookup) or program_encoding < 0:
@@ -261,8 +266,31 @@ def create_and_update_actors(
         t.start()
         # TODO: pass as environment on construction instead
         t.send(DrawingQueueReferenceMessage(drawing_queue))
+        t.send(InformationMessage("homography_matrix", homography_matrix))
 
     t.send(PaperLocationMessage(current_coords))
+    t.send(InformationMessage("frame", frame))  # TODO :: HACKY
+
+
+# def camera_to_projector(
+#     point: Point,
+#     homography_matrix: np.ndarray,
+#     projector_size: tuple[int, int] = (1920, 1080),
+# ) -> Point:
+#     p = np.array([point.x, point.y, 0])
+#     logger.info(f"{p = } {p.shape = }")
+#     logger.info(f"{homography_matrix.shape = }")
+#     ptransformed = np.linalg.matmul(p, homography_matrix)
+#     logger.info(f"{ptransformed = }")
+#     return Point(ptransformed[0], ptransformed[1])
+#
+#
+# def shape_to_projector_space(shape: Polygon, homography_matrix: np.ndarray) -> Polygon:
+#     new_points = []
+#     for point in shape.points:
+#         new_points.append(camera_to_projector(point, homography_matrix))
+#
+#     return Polygon(new_points)
 
 
 def draw(drawing_queue: Queue[Message], canvas: Canvas) -> None:
@@ -314,6 +342,8 @@ def update(
     cv.imshow(window_name, frame)
     frame = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
 
+    assert frame is not None
+
     # Recognise and execute papers
     for coords, tags in detect_paper_tags(frame, homography_matrix):
         program_encoding = tags_to_paper_encoding(tags)
@@ -325,6 +355,8 @@ def update(
                 encoding_to_actor,
                 program_lookup,
                 drawing_queue,
+                homography_matrix,  # TODO :: This is very hacky
+                frame,  # TODO :: THis also
             )
 
     draw(drawing_queue, canvas)
