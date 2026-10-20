@@ -25,8 +25,8 @@ class Slide:
         else I feel like adding
     """
 
-    pos: Polygon
-    id: int
+    tags: Sequence[MatLike]
+    ids: MatLike
 
 
 def transform_point(point: Point, homography_matrix: NDArray) -> Point:
@@ -64,7 +64,7 @@ def average_pt(tag: Polygon) -> Point:
 def detect_slide_tags(
     frame: NDArray | None, homography_matrix: NDArray
 ) -> (
-    tuple[Sequence[MatLike], MatLike] | bool
+    list[Slide] | bool
 ):  # tuple[Slide, Sequence[MatLike], list[int]] | bool | list[Slide] | Any:
     """Determines what papers are within a frame of video.
 
@@ -93,7 +93,7 @@ def detect_slide_tags(
     if ids is None:
         return False
 
-    return (tags, ids)
+    return [Slide(tags, ids)]
 
     # # Check for invalid/bad ids
     # bad_indices = [i for i in range(len(ids)) if ids[i] > APRIL_LIMIT]
@@ -128,12 +128,6 @@ def detect_slide_tags(
     ids_list = [int(i) for i in list(ids)]
     # ordered_ids_list = [ids_list[i] for i in indices]
 
-    # -- Sequence of tags that make up a slide
-    return [()]
-
-    # return (Slide(pos=transformed_tag_shapes), tags, ids_list)
-    # return [(ordered_averaged_paper, ordered_ids_list)]
-
 
 def estimate_tag_pose(tag: MatLike, homography_matrix: NDArray):
     object_points: NDArray = np.array(
@@ -148,29 +142,6 @@ def estimate_tag_pose(tag: MatLike, homography_matrix: NDArray):
     return cv.solvePnP(
         object_points, tag, homography_matrix, None, flags=cv.SOLVEPNP_IPPE_SQUARE
     )
-
-
-# def estimate_slide_outline(slide: Slide, homography_matrix: NDArray):
-#     slide_tag_points: list[tuple[int, int]] = slide.pos.unwrap()
-#     tag_corners: NDArray = np.array(
-#         [[coord[0], coord[1]] for coord in slide_tag_points]
-#     )
-#     object_points: NDArray = np.array(
-#         [
-#             [-5 / 2, 5 / 2, 0],
-#             [5 / 2, 5 / 2, 0],
-#             [5 / 2, -5 / 2, 0],
-#             [-5 / 2, -5 / 2, 0],
-#         ]
-#     )
-#
-#     return cv.solvePnP(
-#         object_points,
-#         tag_corners,
-#         homography_matrix,
-#         None,
-#         flags=cv.SOLVEPNP_IPPE_SQUARE,
-#     )
 
 
 def run(self: Actor):
@@ -199,6 +170,7 @@ def run(self: Actor):
     ### --- SubProcesses --- #
 
     # Handle messages
+    count = 0
     while True:
         logger.info("Detecting slides")
 
@@ -227,30 +199,20 @@ def run(self: Actor):
         if slides == False:
             continue
 
-        assert type(slides) == tuple
+        assert type(slides) == list
 
-        tags, ids = slides
-
-        # assert type(slides) == list
-        # logger.debug(f"{slides = }")
-
-        # logger.debug(f"{slides[0].pos = }")
+        tags, ids = slides[0].tags, slides[0].ids
 
         rvecs, tvecs = [], []
 
         for tag in tags:
-            # _, rvec, tvec = estimate_slide_outline(slide, homography_matrix)
             _, rvec, tvec = estimate_tag_pose(tag, homography_matrix)
             rvecs.append(rvec)
             tvecs.append(tvec)
 
         copy = frame.copy()
-        # corners = np.array([[0, 0], [0, 1], [1, 1], [1, 0]], dtype=np.float32)
-        # # for pos in [slide.pos.unwrap() for slide in slides]:
-        # # corners = [slide.pos.unwrap() for slide in slides]
-        # ids = [slide.id for slide in slides]
         cv.aruco.drawDetectedMarkers(copy, tags, ids)
         for rvec, tvec in zip(rvecs, tvecs):
             cv.drawFrameAxes(copy, homography_matrix, None, rvec, tvec, 10, 2)
-        cv.imwrite("PnP_output.png", copy)
-        break
+        # cv.imwrite(f"PnP_output.png_{count}", copy)
+        # count += 1
