@@ -164,9 +164,11 @@ def detect_slide_area(slide: Slide, homography_matrix: NDArray) -> Polygon | Non
 
     alpha = p1 - p0  # vector from p0 (top left) to p1 (either other tag, doesnt matter)
 
-    p3 = p1 + alpha
+    p3 = p2 + alpha
 
-    return Polygon([p0, p1, p2, p3])
+    ordered_slide = ordered_rectangle(Polygon([p0, p1, p2, p3]), p0)
+
+    return ordered_slide[0]
 
 
 def estimate_tag_pose(tag: MatLike, homography_matrix: NDArray):
