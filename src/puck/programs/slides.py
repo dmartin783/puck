@@ -15,6 +15,7 @@ from ..messages import *  # TODO :: Avoid
 logger = logging.getLogger(__name__)
 
 SLIDE_TAGS = cv.aruco.getPredefinedDictionary(cv.aruco.DICT_APRILTAG_25H9)
+N_TAGS = 3
 
 
 @dataclass
@@ -25,8 +26,8 @@ class Slide:
         else I feel like adding
     """
 
-    tags: Sequence[MatLike]
-    ids: MatLike
+    tags: Sequence[MatLike]  # Both tags that make up the slide corners
+    ids: MatLike  # Corrosponding ids
 
 
 def transform_point(point: Point, homography_matrix: NDArray) -> Point:
@@ -58,7 +59,7 @@ def average_pt(tag: Polygon) -> Point:
     for x, y in tag:
         sum_x += x
         sum_y += y
-    return Point(int(sum_x / 2), int(sum_y / 2))
+    return Point(int(sum_x / 4), int(sum_y / 4))
 
 
 def detect_slide_tags(
@@ -76,7 +77,7 @@ def detect_slide_tags(
         homography_matrix: a matrix to account for image distortion
 
     Returns:
-        A list of papers and their associated list of four tags
+        A list of slides and their associated list of three tags
     """
     if frame is None:
         logger.debug(f"{frame = }")
@@ -90,7 +91,7 @@ def detect_slide_tags(
     )  # tags an Nx4 array where N is the number of tags
     logger.debug(f"{ids = }")
 
-    if ids is None:
+    if ids is None or len(ids) != N_TAGS:
         return False
 
     return [Slide(tags, ids)]
@@ -116,7 +117,7 @@ def detect_slide_tags(
 
     assert len(ids_list) == len(transformed_tag_shapes)
 
-    if len(ids_list) != 2:
+    if len(ids_list) != N_TAGS:
         return False
 
     # averaged_paper = Polygon([average_pt(shape) for shape in transformed_tag_shapes])
@@ -129,19 +130,67 @@ def detect_slide_tags(
     # ordered_ids_list = [ids_list[i] for i in indices]
 
 
+def detect_slide_area(slide: Slide, homography_matrix: NDArray) -> Polygon | None:
+    tags = slide.tags
+    if len(tags) != N_TAGS:
+        return None
+
+    ids = slide.ids
+    tags = slide.tags
+
+    tags_pos: list[tuple[int, Point]] = []
+
+    for id, tag in zip(ids, tags):
+        logger.info(tag)
+        tag = tag[
+            0
+        ]  # -- tags are given in a wierd format wrapped in an outer, single element array TODO :: fix this in an elegant manner
+        tag_shape = Polygon.from_array(tag)
+        transformed_tag_shape = transform_shape(tag_shape, homography_matrix)
+        tags_pos.append((id, average_pt(transformed_tag_shape)))
+
+    top_left = [(tag_pos[0], tag_pos[1]) for tag_pos in tags_pos if tag_pos[0] >= 1]
+    if len(top_left) != 1:
+        return None
+    p0 = top_left[0][1]
+
+    others = [tag_pos for tag_pos in tags_pos if tag_pos[0] == 0]
+    if len(others) != 2:
+        return None
+    logger.info(f"{top_left = } {others = }")
+
+    p1 = others[0][1]
+    p2 = others[1][1]
+
+    alpha = p1 - p0  # vector from p0 (top left) to p1 (either other tag, doesnt matter)
+
+    p3 = p1 + alpha
+
+    return Polygon([p0, p1, p2, p3])
+
+
 def estimate_tag_pose(tag: MatLike, homography_matrix: NDArray):
+    square_length = 5
     object_points: NDArray = np.array(
         [
-            [-5 / 2, 5 / 2, 0],
-            [5 / 2, 5 / 2, 0],
-            [5 / 2, -5 / 2, 0],
-            [-5 / 2, -5 / 2, 0],
+            [-square_length / 2, square_length / 2, 0],
+            [square_length / 2, square_length / 2, 0],
+            [square_length / 2, -square_length / 2, 0],
+            [-square_length / 2, -square_length / 2, 0],
         ]
     )
 
-    return cv.solvePnP(
-        object_points, tag, homography_matrix, None, flags=cv.SOLVEPNP_IPPE_SQUARE
+    ret, rvec, tvec = cv.solvePnP(
+        object_points,
+        tag,
+        homography_matrix,
+        None,
+        flags=cv.SOLVEPNP_IPPE_SQUARE,
     )
+
+    logger.info(rvec)
+
+    return ret, rvec, tvec
 
 
 def run(self: Actor):
@@ -166,6 +215,9 @@ def run(self: Actor):
 
     frame = None
 
+    slide_id = None
+    addPolySent = False
+
     slides = {}  # TODO :: Dict from id to slide object?
     ### --- SubProcesses --- #
 
@@ -189,30 +241,47 @@ def run(self: Actor):
                 pass
             case InformationMessage("frame", data):
                 frame = data
+            case CanvasIdMessage(id):
+                slide_id = id
             case _:
                 pass
 
         if frame is None:
             continue
         slides = detect_slide_tags(frame, homography_matrix)
-        logger.info(f"{type(slides) = }")
         if slides == False:
             continue
 
         assert type(slides) == list
 
-        tags, ids = slides[0].tags, slides[0].ids
+        slide = slides[0]
+        logger.info(f"{slide.ids = }")
 
-        rvecs, tvecs = [], []
+        area = detect_slide_area(slides[0], homography_matrix)
+        logger.info(f"{area = }")
+        if area is None:
+            continue
 
-        for tag in tags:
-            _, rvec, tvec = estimate_tag_pose(tag, homography_matrix)
-            rvecs.append(rvec)
-            tvecs.append(tvec)
+        if slide_id is None or not addPolySent:
+            addPolySent = True
+            draw_queue.put(AddPolygonMessage(self, area))
+            logger.info("Added slide")
+        elif slide_id is not None:
+            draw_queue.put(UpdatePolygonMessage(self, slide_id, area))
+            logger.info("Updated slide")
 
-        copy = frame.copy()
-        cv.aruco.drawDetectedMarkers(copy, tags, ids)
-        for rvec, tvec in zip(rvecs, tvecs):
-            cv.drawFrameAxes(copy, homography_matrix, None, rvec, tvec, 10, 2)
+        # tags, ids = slides[0].tags, slides[0].ids
+
+        # rvecs, tvecs = [], []
+
+        # for tag in tags:
+        #     _, rvec, tvec = estimate_tag_pose(tag, homography_matrix)
+        #     rvecs.append(rvec)
+        #     tvecs.append(tvec)
+
+        # copy = frame.copy()
+        # cv.aruco.drawDetectedMarkers(copy, tags, ids)
+        # # for rvec, tvec in zip(rvecs, tvecs):
+        # cv.drawFrameAxes(copy, homography_matrix, None, rvecs[0], tvecs[0], 10, 2)
         # cv.imwrite(f"PnP_output.png_{count}", copy)
-        # count += 1
+        # # count += 1

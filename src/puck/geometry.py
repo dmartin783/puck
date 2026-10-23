@@ -8,9 +8,11 @@ Example:
 """
 
 import math
-import numpy as np
-from dataclasses import dataclass
 from collections.abc import Iterator
+from dataclasses import dataclass
+
+import numpy as np
+from numpy.typing import NDArray
 
 
 @dataclass
@@ -28,6 +30,38 @@ class Point:
         dx = self.x - other.x
         dy = self.y - other.y
         return math.sqrt(dy**2 + dx**2)
+
+    def to_numpy(self) -> NDArray[np.int32]:
+        """
+        returns 3D row vector as numpy array
+        """
+        return np.array([self.x, self.y, 0], dtype=np.int32)
+
+    @classmethod
+    def from_numpy(cls, array: NDArray) -> Point:
+        """
+        Array is a 3x1 row vector, throw away z
+        """
+
+        return Point(array[0], array[1])
+
+    def __add__(self, other: Point) -> Point:
+        """
+        Vector addition
+        """
+        if type(other) != Point:
+            raise ValueError(f"other must be a point, recieved {type(other)}")
+
+        return Point(self.x + other.x, self.y + other.y)
+
+    def __sub__(self, other: Point) -> Point:
+        """
+        Vector subtraction
+        """
+        if type(other) != Point:
+            raise ValueError(f"other must be a point, recieved {type(other)}")
+
+        return Point(self.x - other.x, self.y - other.y)
 
 
 @dataclass
