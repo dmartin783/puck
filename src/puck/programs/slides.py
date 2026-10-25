@@ -171,6 +171,44 @@ def detect_slide_area(slide: Slide, homography_matrix: NDArray) -> Polygon | Non
     return ordered_slide[0]
 
 
+# TODO :: TEST THIS !!!!!
+def align_slide(slide_area: Polygon, frame: MatLike) -> Polygon:
+    corners = slide_area.points  # Points clockwise from top left corner
+
+    # -- These 2 define the top edge (i.e. +X direction)
+    p0 = corners[0]
+    p1 = corners[1]
+
+    size = (1920 / 2, 1080 / 2)
+
+    d = p1 - p0  # top edge
+    d_norm = d.to_numpy() / np.linalg.norm(d.to_numpy())
+
+    angle = np.arccos(np.dot(d_norm, [1, 0]))
+
+    center = average_pt(slide_area).to_numpy()
+
+    center = (center[0], center[1])
+
+    # TODO :: Angle maybe -ve angle to rotate back to 0?
+    rot_mat = cv.getRotationMatrix2D(center, np.rad2deg(angle), 1)
+
+    rotated = cv.warpAffine(frame, rot_mat, size)
+
+    # Crop to just slide
+    ## Rotate slide points
+    p0_rot = np.linalg.matmul(p0.to_numpy(), rot_mat)  # - top left
+    p1_rot = np.linalg.matmul(p1.to_numpy(), rot_mat)  # - top right
+    p2_rot = np.linalg.matmul(corners[2].to_numpy(), rot_mat)  # - bottom right
+    p3_rot = np.linalg.matmul(corners[3].to_numpy(), rot_mat)  # - bottom left
+
+    cropped = rotated[
+        p0_rot[1] : p2_rot[1], p0_rot[0] : p2_rot[0]
+    ]  # TODO :: I think this is right
+
+    return cropped
+
+
 def estimate_tag_pose(tag: MatLike, homography_matrix: NDArray):
     square_length = 5
     object_points: NDArray = np.array(
