@@ -29,6 +29,9 @@ class Slide:
     tags: Sequence[MatLike]  # Both tags that make up the slide corners
     ids: MatLike  # Corrosponding ids
 
+    area_camera: Polygon | None = None  # slide area in camera space
+    slide_content: MatLike | None = None  # slide content image
+
 
 def transform_point(point: Point, homography_matrix: NDArray) -> Point:
     """Transforms point from a detected point to a point in projection space."""
@@ -62,22 +65,17 @@ def average_pt(tag: Polygon) -> Point:
     return Point(int(sum_x / 4), int(sum_y / 4))
 
 
-def detect_slide_tags(
-    frame: NDArray | None, homography_matrix: NDArray
-) -> (
-    list[Slide] | bool
-):  # tuple[Slide, Sequence[MatLike], list[int]] | bool | list[Slide] | Any:
-    """Determines what papers are within a frame of video.
+def detect_slide_tags(frame: NDArray | None) -> list[Slide] | bool:
+    """Determines what slides are within a frame of video.
 
-    Currently we are just looking for one paper at a time.
+    Currently we are just looking for one slide at a time.
     This needs to be increased in newer implementations.
 
     Args:
         frame: a frame of the video feed.
-        homography_matrix: a matrix to account for image distortion
 
     Returns:
-        A list of slides and their associated list of three tags
+        A list of slides
     """
     if frame is None:
         logger.debug(f"{frame = }")
@@ -96,41 +94,8 @@ def detect_slide_tags(
 
     return [Slide(tags, ids)]
 
-    # # Check for invalid/bad ids
-    # bad_indices = [i for i in range(len(ids)) if ids[i] > APRIL_LIMIT]
-    # if len(bad_indices) > 0:
-    #     # Save problematic frame
-    #     bad_ids = [ids[i] for i in bad_indices]
-    #     logger.warning(f"Invalid AprilTag Value(s): {bad_ids} detected")
-    #     copy = cv.aruco.drawDetectedMarkers(frame, tags, ids)
-    #     cv.imwrite(f"invalid_AprilTag_{datetime.now().isoformat()}.png", copy)
 
-    # Assemble required data in lists, filtering out any bad IDs
-    ids_list = [int(ids[i]) for i in range(len(ids))]  # if i not in bad_indices]
-    tag_shapes: list[Polygon] = [
-        Polygon.from_array(tags[i][0])
-        for i in range(len(tags))  # if i not in bad_indices
-    ]
-    transformed_tag_shapes = [
-        transform_shape(shape, homography_matrix) for shape in tag_shapes
-    ]  # -- list of all tags (polygons)
-
-    assert len(ids_list) == len(transformed_tag_shapes)
-
-    if len(ids_list) != N_TAGS:
-        return False
-
-    # averaged_paper = Polygon([average_pt(shape) for shape in transformed_tag_shapes])
-    # ordered_averaged_paper, indices = ordered_rectangle(
-    #    averaged_paper, averaged_paper[0]
-    # )
-
-    # TODO: Allow for multiple papers.
-    ids_list = [int(i) for i in list(ids)]
-    # ordered_ids_list = [ids_list[i] for i in indices]
-
-
-def detect_slide_area(slide: Slide, homography_matrix: NDArray) -> Polygon | None:
+def detect_slides(slide: Slide) -> Polygon | None:
     tags = slide.tags
     if len(tags) != N_TAGS:
         return None
@@ -142,18 +107,18 @@ def detect_slide_area(slide: Slide, homography_matrix: NDArray) -> Polygon | Non
 
     for id, tag in zip(ids, tags):
         logger.info(tag)
-        tag = tag[
-            0
-        ]  # -- tags are given in a wierd format wrapped in an outer, single element array TODO :: fix this in an elegant manner
+        # -- tags are given in a wierd format wrapped in an outer, single element array TODO :: fix this in an elegant manner
+        tag = tag[0]
         tag_shape = Polygon.from_array(tag)
-        transformed_tag_shape = transform_shape(tag_shape, homography_matrix)
-        tags_pos.append((id, average_pt(transformed_tag_shape)))
+        tags_pos.append((id, average_pt(tag_shape)))
 
+    # top left tag is defined as being only tag in slide with id > 0
     top_left = [(tag_pos[0], tag_pos[1]) for tag_pos in tags_pos if tag_pos[0] >= 1]
     if len(top_left) != 1:
         return None
     p0 = top_left[0][1]
 
+    # every other tag in the slide should have an id of 0
     others = [tag_pos for tag_pos in tags_pos if tag_pos[0] == 0]
     if len(others) != 2:
         return None
@@ -166,46 +131,107 @@ def detect_slide_area(slide: Slide, homography_matrix: NDArray) -> Polygon | Non
 
     p3 = p2 + alpha
 
-    ordered_slide = ordered_rectangle(Polygon([p0, p1, p2, p3]), p0)
+    ordered_area, _new_points_order = ordered_rectangle(Polygon([p0, p1, p2, p3]), p0)
 
-    return ordered_slide[0]
+    return ordered_area
 
 
 # TODO :: TEST THIS !!!!!
-def align_slide(slide_area: Polygon, frame: MatLike) -> Polygon:
+def align_and_crop_slide(slide: Slide, frame: MatLike) -> MatLike:
+    slide_area = slide.area_camera
+    if type(slide_area) != Polygon:
+        raise ValueError(f"Slide area must have been found, area is {slide_area}")
+
+    sketch = np.copy(frame)
+
     corners = slide_area.points  # Points clockwise from top left corner
 
     # -- These 2 define the top edge (i.e. +X direction)
     p0 = corners[0]
     p1 = corners[1]
 
-    size = (1920 / 2, 1080 / 2)
+    logger.info(f"{p0.to_numpy()[0:2] = } {p1.to_numpy()[0:2] = }")
+
+    cv.line(sketch, list(p0.to_numpy()[0:2]), list(p1.to_numpy()[0:2]), 0, 3)
+    size = (1920, 1080)
 
     d = p1 - p0  # top edge
     d_norm = d.to_numpy() / np.linalg.norm(d.to_numpy())
 
-    angle = np.arccos(np.dot(d_norm, [1, 0]))
+    corners = np.array([p.to_numpy() for p in corners])
+    # logger.info(f"{corners = }")
+    corners = np.apply_along_axis(lambda p: p[0:2], 1, corners)
+    # logger.info(f"{corners = }")
 
-    center = average_pt(slide_area).to_numpy()
+    angle = np.arccos(
+        np.dot(d_norm, [1, 0, 0])
+    )  # -- negative to correct angle TODO :: convince self this is correct
 
-    center = (center[0], center[1])
+    center = [int(x) for x in average_pt(slide_area).to_numpy()]
+
+    logger.info(f"{center = }")
+
+    logger.info(f"{frame.shape = }")
 
     # TODO :: Angle maybe -ve angle to rotate back to 0?
-    rot_mat = cv.getRotationMatrix2D(center, np.rad2deg(angle), 1)
+    rotate_translate_mat = cv.getRotationMatrix2D(
+        (center[0], center[1]), np.rad2deg(angle), 1
+    )
 
-    rotated = cv.warpAffine(frame, rot_mat, size)
+    logger.info(f"{rotate_translate_mat = }")
 
-    # Crop to just slide
-    ## Rotate slide points
-    p0_rot = np.linalg.matmul(p0.to_numpy(), rot_mat)  # - top left
-    p1_rot = np.linalg.matmul(p1.to_numpy(), rot_mat)  # - top right
-    p2_rot = np.linalg.matmul(corners[2].to_numpy(), rot_mat)  # - bottom right
-    p3_rot = np.linalg.matmul(corners[3].to_numpy(), rot_mat)  # - bottom left
+    rotated = cv.warpAffine(frame, rotate_translate_mat, size)
+
+    logger.debug(f"{corners = }")
+    # corners = np.reshape(corners, (4, 2, 1))
+    # logger.debug(f"{corners = }")
+    # # corners[0].reshape((2, 1))
+    # a = np.reshape(corners[0], (2, 1))
+    # logger.debug(f"{corners[0] = } {rot_mat.shape = }")
+
+    rot_mat = rotate_translate_mat[:, :2]  # -- Remove extra opencv scale crap
+    translation = rotate_translate_mat[:, 2]
+    # rot_mat = rot_mat.T  # -- Make ok for numpy
+    # # TODO :: Verify that changes made are why it "works" now
+    # # TODO :: Translation matrix
+    # logger.info(rot_mat)
+
+    p0_rot = np.dot(rot_mat, corners[0])
+    p2_rot = np.dot(rot_mat, corners[2])
+
+    p0_rot = np.add(p0_rot, translation)
+    p2_rot = np.add(p2_rot, translation)
+    # # Crop to just slide
+    # ## Rotate slide points
+    # p0_rot = np.linalg.matmul(corners[0], rot_mat)[0:2]  # - top left
+    # p1_rot = np.linalg.matmul(corners[1], rot_mat)[0:2]  # - top right
+    # p2_rot = np.linalg.matmul(corners[2], rot_mat)[0:2]  # - bottom right
+    # p3_rot = np.linalg.matmul(corners[3], rot_mat)[0:2]  # - bottom left
+
+    cv.rectangle(
+        sketch,
+        [int(x) for x in corners[0][0:2]],
+        [int(x) for x in corners[2][0:2]],
+        (0, 0, 255),
+        1,
+    )
+
+    cv.rectangle(
+        rotated,
+        [int(x) for x in p0_rot[0:2]],
+        [int(x) for x in p2_rot[0:2]],
+        (0, 0, 255),
+        1,
+    )
+
+    logger.info(f"{p0_rot = } {p2_rot = }")
 
     cropped = rotated[
-        p0_rot[1] : p2_rot[1], p0_rot[0] : p2_rot[0]
+        int(p0_rot[1]) : int(p2_rot[1]), int(p0_rot[0]) : int(p2_rot[0])
     ]  # TODO :: I think this is right
 
+    cv.imwrite("before.png", sketch)
+    # TODO :: REFACTOR AND UPSCALE
     return cropped
 
 
@@ -288,7 +314,7 @@ def run(self: Actor):
 
         if frame is None:
             continue
-        slides = detect_slide_tags(frame, homography_matrix)
+        slides = detect_slide_tags(frame)
         if slides == False:
             continue
 
@@ -297,18 +323,24 @@ def run(self: Actor):
         slide = slides[0]
         logger.info(f"{slide.ids = }")
 
-        area = detect_slide_area(slides[0], homography_matrix)
-        logger.info(f"{area = }")
-        if area is None:
+        slides[0].area_camera = detect_slides(slides[0])
+        logger.info(f"{slides[0].area_camera = }")
+        if slides[0].area_camera is None:
             continue
 
         if slide_id is None or not addPolySent:
             addPolySent = True
-            draw_queue.put(AddPolygonMessage(self, area))
+            draw_queue.put(AddPolygonMessage(self, slides[0].area_camera))
             logger.info("Added slide")
         elif slide_id is not None:
-            draw_queue.put(UpdatePolygonMessage(self, slide_id, area))
+            draw_queue.put(UpdatePolygonMessage(self, slide_id, slides[0].area_camera))
             logger.info("Updated slide")
+
+        slide_content = align_and_crop_slide(slides[0], frame)
+
+        logger.info(f"{type(slide_content) = }")
+
+        cv.imwrite("cropped.png", slide_content)
 
         # tags, ids = slides[0].tags, slides[0].ids
 
