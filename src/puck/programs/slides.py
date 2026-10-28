@@ -26,10 +26,11 @@ class Slide:
         else I feel like adding
     """
 
-    tags: Sequence[MatLike]  # Both tags that make up the slide corners
-    ids: MatLike  # Corrosponding ids
+    # tags: Sequence[MatLike]  # Both tags that make up the slide corners
+    # ids: MatLike  # Corrosponding ids
+    id: int  # slide id is id of tag in top left corner
 
-    area_camera: Polygon | None = None  # slide area in camera space
+    area_camera: Polygon  # slide area in camera space
     slide_content: MatLike | None = None  # slide content image
 
 
@@ -89,55 +90,92 @@ def detect_slide_tags(frame: NDArray | None) -> list[Slide] | bool:
     )  # tags an Nx4 array where N is the number of tags
     logger.debug(f"{ids = }")
 
-    if ids is None or len(ids) != N_TAGS:
+    if ids is None or len(ids) % N_TAGS != 0:
         return False
 
+    # ids[i] <=> tag_shapes[i]
     tag_shapes = [Polygon.from_array(tag[0]) for tag in tags]
-    ordered_tag_shapes = [
+    # ids[i] <=> ordered_tag_shapes[i]
+    ordered_tag_shapes_and_indicies: list[tuple[Polygon, list[int]]] = [
         ordered_rectangle(tag_shape, tag_shape.points[0]) for tag_shape in tag_shapes
+    ]
+
+    ordered_tag_shapes: list[Polygon] = [
+        shape for shape, indicies in ordered_tag_shapes_and_indicies
     ]
 
     # TODO :: something about ids being included in `ordered_tag_shapes`
     #         use to differentiate slides.
 
-    # return [Slide(tags, ids)]
-
-    if len(tags) != N_TAGS:
+    if len(tags) % N_TAGS != 0:
         return False
 
     tags_pos: list[tuple[int, Point]] = []
 
-    for id, tag in zip(ids, tags):
-        logger.info(tag)
-        # -- tags are given in a wierd format wrapped in an outer, single element array TODO :: fix this in an elegant manner
-        tag = tag[0]
-        tag_shape = Polygon.from_array(tag)
-        tags_pos.append((id, average_pt(tag_shape)))
+    for id, shape in zip(ids, ordered_tag_shapes):
+        tags_pos.append((id, average_pt(shape)))
 
     # top left tag is defined as being only tag in slide with id > 0
     top_left = [(tag_pos[0], tag_pos[1]) for tag_pos in tags_pos if tag_pos[0] >= 1]
-    if len(top_left) != 1:
-        return False
-    p0 = top_left[0][1]
+    # if len(top_left) != 1:
+    #     return False
 
     # every other tag in the slide should have an id of 0
     others = [tag_pos for tag_pos in tags_pos if tag_pos[0] == 0]
-    if len(others) != 2:
-        return False
+    # if len(others) != 2:
+    #     return False
     logger.info(f"{top_left = } {others = }")
 
-    p1 = others[0][1]
-    p2 = others[1][1]
+    # should figure out here which point belongs to which slide.
 
-    alpha = p1 - p0  # vector from p0 (top left) to p1 (either other tag, doesnt matter)
+    ANGLE_EPSILON = 5  # degrees
 
-    p3 = p2 + alpha
+    valid_rects = []
+    for tl_id, tl in top_left:
+        for o1_id, o1 in others.copy():
+            for o2_id, o2 in others.copy():
+                if o1 == o2:
+                    continue
+                edge_one = o1 - tl
+                edge_two = o2 - tl
+                # from geometric definition of dot product
+                angle = np.arccos(
+                    np.dot(edge_one.to_numpy(), edge_two.to_numpy())
+                    / (
+                        np.linalg.norm(edge_one.to_numpy())
+                        * np.linalg.norm(edge_two.to_numpy())
+                    )
+                )
 
-    ordered_area, _new_points_order = ordered_rectangle(Polygon([p0, p1, p2, p3]), p0)
+                logger.info(f"{np.rad2deg(angle) = }")
+
+                if abs(np.rad2deg(angle) - 90) < ANGLE_EPSILON:
+                    valid_rects.append((tl_id, tl, o1, o2))
+                    others.remove((o1_id, o1))
+                    others.remove((o2_id, o2))
+                    # top_left.remove((tl_id, tl))
+
+    logger.info(f"{valid_rects = }")
+
+    slides = []
+    for rect in valid_rects:
+        id, p0, p1, p2 = rect
+
+        alpha = (
+            p1 - p0
+        )  # vector from p0 (top left) to p1 (either other tag, doesnt matter)
+
+        p3 = p2 + alpha
+
+        ordered_area, _new_points_order = ordered_rectangle(
+            Polygon([p0, p1, p2, p3]), p0
+        )
+
+        slides.append(Slide(id, area_camera=ordered_area))
 
     # area_camera now contains clockwise ordered list of all points that make up area from top left.
     # points are center points of tags + one that was inferred as being the center of the excluded tag.
-    return [Slide(tags, ids, area_camera=ordered_area)]
+    return slides
 
 
 # TODO :: TEST THIS !!!!!
@@ -294,9 +332,6 @@ def run(self: Actor):
 
         assert type(slides) == list
 
-        slide = slides[0]
-        logger.info(f"{slide.ids = }")
-
         logger.info(f"{slides[0].area_camera = }")
         if slides[0].area_camera is None:
             continue
@@ -314,19 +349,3 @@ def run(self: Actor):
         logger.info(f"{type(slide_content) = }")
 
         cv.imwrite("cropped.png", slide_content)
-
-        # tags, ids = slides[0].tags, slides[0].ids
-
-        # rvecs, tvecs = [], []
-
-        # for tag in tags:
-        #     _, rvec, tvec = estimate_tag_pose(tag, homography_matrix)
-        #     rvecs.append(rvec)
-        #     tvecs.append(tvec)
-
-        # copy = frame.copy()
-        # cv.aruco.drawDetectedMarkers(copy, tags, ids)
-        # # for rvec, tvec in zip(rvecs, tvecs):
-        # cv.drawFrameAxes(copy, homography_matrix, None, rvecs[0], tvecs[0], 10, 2)
-        # cv.imwrite(f"PnP_output.png_{count}", copy)
-        # # count += 1
