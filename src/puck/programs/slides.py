@@ -92,16 +92,18 @@ def detect_slide_tags(frame: NDArray | None) -> list[Slide] | bool:
     if ids is None or len(ids) != N_TAGS:
         return False
 
-    return [Slide(tags, ids)]
+    tag_shapes = [Polygon.from_array(tag[0]) for tag in tags]
+    ordered_tag_shapes = [
+        ordered_rectangle(tag_shape, tag_shape.points[0]) for tag_shape in tag_shapes
+    ]
 
+    # TODO :: something about ids being included in `ordered_tag_shapes`
+    #         use to differentiate slides.
 
-def detect_slides(slide: Slide) -> Polygon | None:
-    tags = slide.tags
+    # return [Slide(tags, ids)]
+
     if len(tags) != N_TAGS:
-        return None
-
-    ids = slide.ids
-    tags = slide.tags
+        return False
 
     tags_pos: list[tuple[int, Point]] = []
 
@@ -115,13 +117,13 @@ def detect_slides(slide: Slide) -> Polygon | None:
     # top left tag is defined as being only tag in slide with id > 0
     top_left = [(tag_pos[0], tag_pos[1]) for tag_pos in tags_pos if tag_pos[0] >= 1]
     if len(top_left) != 1:
-        return None
+        return False
     p0 = top_left[0][1]
 
     # every other tag in the slide should have an id of 0
     others = [tag_pos for tag_pos in tags_pos if tag_pos[0] == 0]
     if len(others) != 2:
-        return None
+        return False
     logger.info(f"{top_left = } {others = }")
 
     p1 = others[0][1]
@@ -133,7 +135,9 @@ def detect_slides(slide: Slide) -> Polygon | None:
 
     ordered_area, _new_points_order = ordered_rectangle(Polygon([p0, p1, p2, p3]), p0)
 
-    return ordered_area
+    # area_camera now contains clockwise ordered list of all points that make up area from top left.
+    # points are center points of tags + one that was inferred as being the center of the excluded tag.
+    return [Slide(tags, ids, area_camera=ordered_area)]
 
 
 # TODO :: TEST THIS !!!!!
@@ -183,15 +187,9 @@ def align_and_crop_slide(slide: Slide, frame: MatLike) -> MatLike:
     rotated = cv.warpAffine(frame, rotate_translate_mat, size)
 
     logger.debug(f"{corners = }")
-    # corners = np.reshape(corners, (4, 2, 1))
-    # logger.debug(f"{corners = }")
-    # # corners[0].reshape((2, 1))
-    # a = np.reshape(corners[0], (2, 1))
-    # logger.debug(f"{corners[0] = } {rot_mat.shape = }")
 
     rot_mat = rotate_translate_mat[:, :2]  # -- Remove extra opencv scale crap
     translation = rotate_translate_mat[:, 2]
-    # rot_mat = rot_mat.T  # -- Make ok for numpy
     # # TODO :: Verify that changes made are why it "works" now
     # # TODO :: Translation matrix
     # logger.info(rot_mat)
@@ -233,30 +231,6 @@ def align_and_crop_slide(slide: Slide, frame: MatLike) -> MatLike:
     cv.imwrite("before.png", sketch)
     # TODO :: REFACTOR AND UPSCALE
     return cropped
-
-
-def estimate_tag_pose(tag: MatLike, homography_matrix: NDArray):
-    square_length = 5
-    object_points: NDArray = np.array(
-        [
-            [-square_length / 2, square_length / 2, 0],
-            [square_length / 2, square_length / 2, 0],
-            [square_length / 2, -square_length / 2, 0],
-            [-square_length / 2, -square_length / 2, 0],
-        ]
-    )
-
-    ret, rvec, tvec = cv.solvePnP(
-        object_points,
-        tag,
-        homography_matrix,
-        None,
-        flags=cv.SOLVEPNP_IPPE_SQUARE,
-    )
-
-    logger.info(rvec)
-
-    return ret, rvec, tvec
 
 
 def run(self: Actor):
@@ -323,7 +297,6 @@ def run(self: Actor):
         slide = slides[0]
         logger.info(f"{slide.ids = }")
 
-        slides[0].area_camera = detect_slides(slides[0])
         logger.info(f"{slides[0].area_camera = }")
         if slides[0].area_camera is None:
             continue
