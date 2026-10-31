@@ -1,37 +1,20 @@
 import logging
-from dataclasses import dataclass
-from typing import Sequence
 
 import cv2 as cv
 import numpy as np
 from cv2.typing import MatLike
 from numpy.typing import NDArray
 
-from ..actor import Actor
-from ..calibration.calibrate import CalibrationInfo, calibrate
-from ..geometry import Point, Polygon, ordered_rectangle
-from ..messages import *  # TODO :: Avoid
+from puck.geometry import Point, Polygon, ordered_rectangle
+
+from .slide import Slide
 
 logger = logging.getLogger(__name__)
 
 SLIDE_TAGS = cv.aruco.getPredefinedDictionary(cv.aruco.DICT_APRILTAG_25H9)
 N_TAGS = 3
 
-
-@dataclass
-class Slide:
-    """
-    Will hold all information relating to slides, including but by no
-        means limited to their position, linked multimedia, and anything
-        else I feel like adding
-    """
-
-    # tags: Sequence[MatLike]  # Both tags that make up the slide corners
-    # ids: MatLike  # Corrosponding ids
-    id: int  # slide id is id of tag in top left corner
-
-    area_camera: Polygon  # slide area in camera space
-    slide_content: MatLike | None = None  # slide content image
+__all__ = ["get_slides"]
 
 
 def transform_point(point: Point, homography_matrix: NDArray) -> Point:
@@ -117,24 +100,24 @@ def detect_slide_tags(frame: NDArray | None) -> list[Slide] | bool:
 
     # top left tag is defined as being only tag in slide with id > 0
     top_left = [(tag_pos[0], tag_pos[1]) for tag_pos in tags_pos if tag_pos[0] >= 1]
-    # if len(top_left) != 1:
-    #     return False
 
     # every other tag in the slide should have an id of 0
     others = [tag_pos for tag_pos in tags_pos if tag_pos[0] == 0]
-    # if len(others) != 2:
-    #     return False
     logger.info(f"{top_left = } {others = }")
 
     # should figure out here which point belongs to which slide.
 
-    ANGLE_EPSILON = 5  # degrees
+    # TODO :: Figure out better epsilon
+    ANGLE_EPSILON = 10  # degrees
 
     valid_rects = []
     for tl_id, tl in top_left:
         for o1_id, o1 in others.copy():
             for o2_id, o2 in others.copy():
+                # logger.debug(f"{o1 = } {o2 = }")
+                # logger.debug(f"{others = }")
                 if o1 == o2:
+                    logger.info("o1 is o2, skipping")
                     continue
                 edge_one = o1 - tl
                 edge_two = o2 - tl
@@ -153,9 +136,11 @@ def detect_slide_tags(frame: NDArray | None) -> list[Slide] | bool:
                     valid_rects.append((tl_id, tl, o1, o2))
                     others.remove((o1_id, o1))
                     others.remove((o2_id, o2))
-                    # top_left.remove((tl_id, tl))
+                    # -- Once i find valid rect for given top left, stop looking
+                    break
+            break
 
-    logger.info(f"{valid_rects = }")
+    # logger.info(f"{valid_rects = }")
 
     slides = []
     for rect in valid_rects:
@@ -179,12 +164,14 @@ def detect_slide_tags(frame: NDArray | None) -> list[Slide] | bool:
 
 
 # TODO :: TEST THIS !!!!!
-def align_and_crop_slide(slide: Slide, frame: MatLike) -> MatLike:
+def align_and_crop_slide(slide: Slide, frame: MatLike) -> Slide:
     slide_area = slide.area_camera
     if type(slide_area) != Polygon:
         raise ValueError(f"Slide area must have been found, area is {slide_area}")
 
-    sketch = np.copy(frame)
+    sketch = None
+    if logger.level > 0:
+        sketch = np.copy(frame)
 
     corners = slide_area.points  # Points clockwise from top left corner
 
@@ -192,9 +179,11 @@ def align_and_crop_slide(slide: Slide, frame: MatLike) -> MatLike:
     p0 = corners[0]
     p1 = corners[1]
 
-    logger.info(f"{p0.to_numpy()[0:2] = } {p1.to_numpy()[0:2] = }")
+    # logger.info(f"{p0.to_numpy()[0:2] = } {p1.to_numpy()[0:2] = }")
 
-    cv.line(sketch, list(p0.to_numpy()[0:2]), list(p1.to_numpy()[0:2]), 0, 3)
+    if logger.level > 0:
+        assert sketch is not None
+        cv.line(sketch, list(p0.to_numpy()[0:2]), list(p1.to_numpy()[0:2]), 0, 3)
     size = (1920, 1080)
 
     d = p1 - p0  # top edge
@@ -211,20 +200,20 @@ def align_and_crop_slide(slide: Slide, frame: MatLike) -> MatLike:
 
     center = [int(x) for x in average_pt(slide_area).to_numpy()]
 
-    logger.info(f"{center = }")
+    # logger.info(f"{center = }")
 
-    logger.info(f"{frame.shape = }")
+    # logger.info(f"{frame.shape = }")
 
     # TODO :: Angle maybe -ve angle to rotate back to 0?
     rotate_translate_mat = cv.getRotationMatrix2D(
         (center[0], center[1]), np.rad2deg(angle), 1
     )
 
-    logger.info(f"{rotate_translate_mat = }")
+    # logger.info(f"{rotate_translate_mat = }")
 
     rotated = cv.warpAffine(frame, rotate_translate_mat, size)
 
-    logger.debug(f"{corners = }")
+    # logger.debug(f"{corners = }")
 
     rot_mat = rotate_translate_mat[:, :2]  # -- Remove extra opencv scale crap
     translation = rotate_translate_mat[:, 2]
@@ -244,108 +233,56 @@ def align_and_crop_slide(slide: Slide, frame: MatLike) -> MatLike:
     # p2_rot = np.linalg.matmul(corners[2], rot_mat)[0:2]  # - bottom right
     # p3_rot = np.linalg.matmul(corners[3], rot_mat)[0:2]  # - bottom left
 
-    cv.rectangle(
-        sketch,
-        [int(x) for x in corners[0][0:2]],
-        [int(x) for x in corners[2][0:2]],
-        (0, 0, 255),
-        1,
-    )
+    if logger.level > 0:
+        assert sketch is not None
+        cv.rectangle(
+            sketch,
+            [int(x) for x in corners[0][0:2]],
+            [int(x) for x in corners[2][0:2]],
+            (0, 0, 255),
+            1,
+        )
 
-    cv.rectangle(
-        rotated,
-        [int(x) for x in p0_rot[0:2]],
-        [int(x) for x in p2_rot[0:2]],
-        (0, 0, 255),
-        1,
-    )
+        cv.rectangle(
+            rotated,
+            [int(x) for x in p0_rot[0:2]],
+            [int(x) for x in p2_rot[0:2]],
+            (0, 0, 255),
+            1,
+        )
 
-    logger.info(f"{p0_rot = } {p2_rot = }")
+    # logger.info(f"{p0_rot = } {p2_rot = }")
 
     cropped = rotated[
         int(p0_rot[1]) : int(p2_rot[1]), int(p0_rot[0]) : int(p2_rot[0])
     ]  # TODO :: I think this is right
 
-    cv.imwrite("before.png", sketch)
+    x, y, _colour = cropped.shape
+    aspect_ratio = max(x / y, y / x)  # Get aspect ratio as (long slide / short side)
+
+    NEW_HEIGHT = 1080
+    new_width = int(NEW_HEIGHT * aspect_ratio)
+
+    scaled = cv.resize(cropped, (new_width, NEW_HEIGHT))
+
+    # logger.info(f"{scaled.shape = } {cropped.shape = }")
+
+    if logger.level > 0:
+        assert sketch is not None
+        cv.imwrite(f"before_{slide.id}.png", sketch)
+        cv.imwrite(f"rotated_{slide.id}.png", rotated)
+        cv.imwrite(f"scaled_{slide.id}.png", scaled)
     # TODO :: REFACTOR AND UPSCALE
-    return cropped
+    slide.slide_content = cropped
+    return slide
 
 
-def run(self: Actor):
-    """
-    Main thread in PPitW program, will look for slides
-        (identified with two tags), and extra functionaity
+def get_slides(frame: MatLike) -> list[Slide] | bool:
+    slides = detect_slide_tags(frame)
+    if slides == False:
+        return False
 
-    If program 3 is seen, the below will run.
-    """
+    assert type(slides) == list
 
-    logger.info("Running PPitW")
-
-    first_message = self.recieve()
-    assert type(first_message) == DrawingQueueReferenceMessage
-    draw_queue = first_message.drawing_queue
-
-    # TODO :: This is very hacky
-    second_message = self.recieve()  # This should be the homograohy matrix
-    assert type(second_message) == InformationMessage
-    assert second_message.name == "homography_matrix"
-    homography_matrix = second_message.data
-
-    frame = None
-
-    slide_id = None
-    addPolySent = False
-
-    slides = {}  # TODO :: Dict from id to slide object?
-    ### --- SubProcesses --- #
-
-    # Handle messages
-    count = 0
-    while True:
-        logger.info("Detecting slides")
-
-        message = self.recieve()
-        if type(message) == InformationMessage and message.name == "frame":
-            logger.info("Recieved frame")
-        else:
-            logger.info(f"{message = }")
-
-        match message:
-            case KillMessage():
-                break
-            case PaperLocationMessage(
-                paper_location
-            ):  # This is where the program paper is, not where a slide is.
-                pass
-            case InformationMessage("frame", data):
-                frame = data
-            case CanvasIdMessage(id):
-                slide_id = id
-            case _:
-                pass
-
-        if frame is None:
-            continue
-        slides = detect_slide_tags(frame)
-        if slides == False:
-            continue
-
-        assert type(slides) == list
-
-        logger.info(f"{slides[0].area_camera = }")
-        if slides[0].area_camera is None:
-            continue
-
-        if slide_id is None or not addPolySent:
-            addPolySent = True
-            draw_queue.put(AddPolygonMessage(self, slides[0].area_camera))
-            logger.info("Added slide")
-        elif slide_id is not None:
-            draw_queue.put(UpdatePolygonMessage(self, slide_id, slides[0].area_camera))
-            logger.info("Updated slide")
-
-        slide_content = align_and_crop_slide(slides[0], frame)
-
-        logger.info(f"{type(slide_content) = }")
-
-        cv.imwrite("cropped.png", slide_content)
+    slides_and_content = [align_and_crop_slide(slide, frame) for slide in slides]
+    return slides_and_content
