@@ -45,7 +45,7 @@ class CanvasIdMessage(Message):
 
 @dataclass
 class DrawingQueueReferenceMessage(Message):
-    drawing_queue: Queue[Message]
+    drawing_queue: Queue[DrawingQueueMessage]
 
 @dataclass
 class InformationMessage(Message):

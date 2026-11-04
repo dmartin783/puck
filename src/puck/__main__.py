@@ -1,5 +1,10 @@
 # Setup tkinter early (necessary on MacOS).
+import tkinter as tk
 from tkinter import Canvas, Tk
+
+from PIL import Image, ImageTk
+
+from puck.programs.ppitw.presentation import UpdateSlideMessage
 
 base = Tk()
 
@@ -27,7 +32,7 @@ from .messages import *
 logger = logging.getLogger(__name__)
 DICT = cv.aruco.getPredefinedDictionary(cv.aruco.DICT_APRILTAG_16H5)
 APRIL_LIMIT = 4
-TICK_LENGTH = 16
+TICK_LENGTH = 1
 CANVAS_HEIGHT, CANVAS_WIDTH = 1080, 1920
 CAMERA_PERSPECTIVE_WINDOW_NAME = "Camera perspective"
 
@@ -247,8 +252,9 @@ def create_and_update_actors(
     encoding_to_actor: dict[str, Actor],
     program_lookup: list[str],
     drawing_queue: Queue[Message],
-    homography_matrix: np.ndarray,
-    frame: np.ndarray,
+    pres_draw_queue: Queue[Message],  # TODO :: HACKY
+    homography_matrix: np.ndarray,  # TODO :: HACKY
+    frame: np.ndarray,  # TODO :: HACKY
 ) -> None:
     """Creates or updates Actors associated with a given program encoding"""
     if program_encoding >= len(program_lookup) or program_encoding < 0:
@@ -266,31 +272,40 @@ def create_and_update_actors(
         t.start()
         # TODO: pass as environment on construction instead
         t.send(DrawingQueueReferenceMessage(drawing_queue))
+        t.send(DrawingQueueReferenceMessage(pres_draw_queue))
         t.send(InformationMessage("homography_matrix", homography_matrix))
 
     t.send(PaperLocationMessage(current_coords))
     t.send(InformationMessage("frame", frame))  # TODO :: HACKY
 
 
-# def camera_to_projector(
-#     point: Point,
-#     homography_matrix: np.ndarray,
-#     projector_size: tuple[int, int] = (1920, 1080),
-# ) -> Point:
-#     p = np.array([point.x, point.y, 0])
-#     logger.info(f"{p = } {p.shape = }")
-#     logger.info(f"{homography_matrix.shape = }")
-#     ptransformed = np.linalg.matmul(p, homography_matrix)
-#     logger.info(f"{ptransformed = }")
-#     return Point(ptransformed[0], ptransformed[1])
-#
-#
-# def shape_to_projector_space(shape: Polygon, homography_matrix: np.ndarray) -> Polygon:
-#     new_points = []
-#     for point in shape.points:
-#         new_points.append(camera_to_projector(point, homography_matrix))
-#
-#     return Polygon(new_points)
+def draw_pres_view(drawing_queue: Queue[Message], canvas: Canvas) -> None:
+    """Draws the commands on the drawing queue onto the canvas."""
+    if not drawing_queue.empty():  # TODO: change to 'while'
+        message = drawing_queue.get()
+        logger.debug(f"draw loop got message {message}")
+
+        if not isinstance(type(message), DrawingQueueMessage):
+            ...
+            # Wierd threading thing if this is an assert?
+            # Race condition something or other?
+
+        match message:
+            case UpdateSlideMessage(sender, slide):
+                assert slide.slide_content is not None
+                # https://stackoverflow.com/questions/28670461/read-an-image-with-opencv-and-display-it-with-tkinter
+                img = cv.cvtColor(slide.slide_content, cv.COLOR_BGR2RGB)
+                im = Image.fromarray(img)
+                tkimg = ImageTk.PhotoImage(image=im)  # TODO :: Pick up from here.
+
+                canvas.create_image(0, 0, anchor=tk.NW, image=tkimg)
+                sender.send(CanvasIdMessage(-1))
+
+            case _:
+                logger.error(f"Unexpected message {message}")
+
+        logger.debug("drawing loop finished")
+    canvas.pack()
 
 
 def draw(drawing_queue: Queue[Message], canvas: Canvas) -> None:
@@ -331,6 +346,8 @@ def update(
     program_lookup: list[str],
     drawing_queue: Queue[Message],
     canvas: Canvas,
+    pres_draw_queue: Queue[Message],  # TODO :: HACKY
+    pres_canvas: Canvas,  # TODO :: HACKY
     window_name: str,
     homography_matrix: np.ndarray,
 ) -> None:
@@ -355,11 +372,13 @@ def update(
                 encoding_to_actor,
                 program_lookup,
                 drawing_queue,
+                pres_draw_queue,  # TODO :: HACKY
                 homography_matrix,  # TODO :: This is very hacky
                 frame,  # TODO :: THis also
             )
 
     draw(drawing_queue, canvas)
+    draw_pres_view(pres_draw_queue, pres_canvas)  # TODO :: HACKY
 
     # Handle quitting
     if cv.waitKey(1) == ord("q"):
@@ -381,6 +400,8 @@ def update(
         program_lookup,
         drawing_queue,
         canvas,
+        pres_draw_queue,  # TODO :: HACKY
+        pres_canvas,
         window_name,
         homography_matrix,
     )
@@ -406,6 +427,8 @@ def start_puck(
     encoding_to_actor: dict[str, Actor] = {}
     canvas = canvas_setup(base)
     drawing_queue: Queue[Message] = Queue()
+    pres_canvas: Canvas = canvas_setup(base)  # TODO :: HACKY
+    pres_draw_queue: Queue[Message] = Queue()  # TODO :: HACKY
     calibration_info = calibrate()
     cam = camera_setup(camera_id)
     camera_perspective_window_setup(CAMERA_PERSPECTIVE_WINDOW_NAME)
@@ -422,6 +445,8 @@ def start_puck(
         program_lookup,
         drawing_queue,
         canvas,
+        pres_draw_queue,  # TODO :: HACKY
+        pres_canvas,  # TODO :: HACKY
         CAMERA_PERSPECTIVE_WINDOW_NAME,
         homography_matrix,
     )

@@ -10,6 +10,7 @@ from puck.geometry import Point, Polygon, ordered_rectangle
 from .slide import Slide
 
 logger = logging.getLogger(__name__)
+logger.level = 0
 
 SLIDE_TAGS = cv.aruco.getPredefinedDictionary(cv.aruco.DICT_APRILTAG_25H9)
 N_TAGS = 3
@@ -71,9 +72,10 @@ def detect_slide_tags(frame: NDArray | None) -> list[Slide] | bool:
     tags, ids, _ = april_tag_detector.detectMarkers(
         frame,
     )  # tags an Nx4 array where N is the number of tags
-    logger.debug(f"{ids = }")
+    # logger.debug(f"{ids = }")
 
     if ids is None or len(ids) % N_TAGS != 0:
+        logger.warning("Not enough IDs")
         return False
 
     # ids[i] <=> tag_shapes[i]
@@ -91,6 +93,7 @@ def detect_slide_tags(frame: NDArray | None) -> list[Slide] | bool:
     #         use to differentiate slides.
 
     if len(tags) % N_TAGS != 0:
+        logger.warning("Not enough tags")
         return False
 
     tags_pos: list[tuple[int, Point]] = []
@@ -103,7 +106,7 @@ def detect_slide_tags(frame: NDArray | None) -> list[Slide] | bool:
 
     # every other tag in the slide should have an id of 0
     others = [tag_pos for tag_pos in tags_pos if tag_pos[0] == 0]
-    logger.info(f"{top_left = } {others = }")
+    # logger.info(f"{top_left = } {others = }")
 
     # should figure out here which point belongs to which slide.
 
@@ -117,7 +120,7 @@ def detect_slide_tags(frame: NDArray | None) -> list[Slide] | bool:
                 # logger.debug(f"{o1 = } {o2 = }")
                 # logger.debug(f"{others = }")
                 if o1 == o2:
-                    logger.info("o1 is o2, skipping")
+                    # logger.info("o1 is o2, skipping")
                     continue
                 edge_one = o1 - tl
                 edge_two = o2 - tl
@@ -130,7 +133,7 @@ def detect_slide_tags(frame: NDArray | None) -> list[Slide] | bool:
                     )
                 )
 
-                logger.info(f"{np.rad2deg(angle) = }")
+                # logger.info(f"{np.rad2deg(angle) = }")
 
                 if abs(np.rad2deg(angle) - 90) < ANGLE_EPSILON:
                     valid_rects.append((tl_id, tl, o1, o2))
@@ -194,9 +197,9 @@ def align_and_crop_slide(slide: Slide, frame: MatLike) -> Slide:
     corners = np.apply_along_axis(lambda p: p[0:2], 1, corners)
     # logger.info(f"{corners = }")
 
-    angle = np.arccos(
-        np.dot(d_norm, [1, 0, 0])
-    )  # -- negative to correct angle TODO :: convince self this is correct
+    angle = np.arctan2(d_norm[1], d_norm[0])  # np.dot(d_norm, [1, 0, 0]))
+    # logger.info(f"{np.rad2deg(angle) = }")
+    # -- negative to correct angle TODO :: convince self this is correct
 
     center = [int(x) for x in average_pt(slide_area).to_numpy()]
 

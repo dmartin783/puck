@@ -1,19 +1,13 @@
 import logging
-from dataclasses import dataclass
-from typing import Sequence
 
 import cv2 as cv
-import numpy as np
-from cv2.typing import MatLike
-from numpy.typing import NDArray
 
 from puck.actor import Actor
-from puck.calibration.calibrate import CalibrationInfo, calibrate
-from puck.geometry import Point, Polygon, ordered_rectangle
 from puck.messages import *  # TODO :: Avoid
 
+from . import presentation
 from .slide import Slide
-from .slide_detection import align_and_crop_slide, detect_slide_tags, get_slides
+from .slide_detection import get_slides
 
 logger = logging.getLogger(__name__)
 
@@ -30,12 +24,16 @@ def run(self: Actor):
 
     logger.info("Running PPitW")
 
-    first_message = self.recieve()
+    first_message: Message = self.recieve()
     assert type(first_message) == DrawingQueueReferenceMessage
-    draw_queue = first_message.drawing_queue
+    draw_queue: Queue[DrawingQueueMessage] = first_message.drawing_queue
+
+    third_message = self.recieve()
+    assert type(third_message) == DrawingQueueReferenceMessage
+    pres_view_queue = third_message.drawing_queue
 
     # TODO :: This is very hacky
-    second_message = self.recieve()  # This should be the homograohy matrix
+    second_message: Message = self.recieve()  # This should be the homograohy matrix
     assert type(second_message) == InformationMessage
     assert second_message.name == "homography_matrix"
     homography_matrix = second_message.data
@@ -46,7 +44,13 @@ def run(self: Actor):
     addPolySent = False
 
     slides = {}  # TODO :: Dict from id to slide object?
+
     ### --- SubProcesses --- #
+    # Spawn Presentation Thread
+    # pres_draw_queue = Queue()
+    # pres_thread = Actor(target=presentation.display)
+    # pres_thread.start()
+    # pres_thread.send(DrawingQueueReferenceMessage(drawing_queue=pres_draw_queue))
 
     # Handle messages
     count = 0
@@ -55,9 +59,9 @@ def run(self: Actor):
 
         message = self.recieve()
         if type(message) == InformationMessage and message.name == "frame":
-            logger.info("Recieved frame")
+            ...  # logger.info("Recieved frame")
         else:
-            logger.info(f"{message = }")
+            ...  # logger.info(f"{message = }")
 
         match message:
             case KillMessage():
@@ -78,12 +82,19 @@ def run(self: Actor):
 
         slides = get_slides(frame)
 
-        logger.info(f"{slides = }")
+        # logger.info(f"{slides = }")
 
         if slides == False:
+            logger.warning("Error in get_slides")
             continue
 
         assert type(slides) == list
+        if len(slides) == 0:
+            logger.info("no slides")
+            continue
+
+        logger.info("Sending slide")
+        pres_view_queue.put(presentation.UpdateSlideMessage(self, slides[0]))
 
         for slide in slides:
             assert slide.slide_content is not None
