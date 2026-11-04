@@ -20,7 +20,13 @@ WINDOW_MASK = "mask"
 @dataclass
 class CalibrationInfo:
     camera_to_projector_homography: np.ndarray
-    background_frame: NDArray[np.uint8]
+
+    def save(self, file_path: str) -> None:
+        np.save(file_path, self.camera_to_projector_homography)
+
+    @classmethod
+    def load(cls, file_path: str) -> CalibrationInfo:
+        return cls(np.load(file_path))
 
 
 def get_projector() -> Monitor:
@@ -316,8 +322,5 @@ def calibrate(debug: bool = True) -> CalibrationInfo:
             key = cv2.waitKey(1) & 0xFF
             if key == ord("q"):
                 break
-
-    return CalibrationInfo(
-        camera_to_projector_homography=homography,
-        background_frame=background_frame,
-    )
+    cv2.destroyAllWindows()
+    return CalibrationInfo(homography)

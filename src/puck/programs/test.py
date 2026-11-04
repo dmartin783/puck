@@ -3,6 +3,7 @@ import logging
 # Relative import of the Actor class.
 from ..actor import Actor
 from ..messages import (
+    Message,
     AddPolygonMessage,
     DrawingQueueReferenceMessage,
     PaperLocationMessage,
@@ -15,7 +16,7 @@ from ..messages import (
 logger = logging.getLogger(__name__)
 
 
-def run(self: Actor) -> None:
+def run(self: Actor[Message]) -> None:
     """Target function for an actor that just tracks a paper on the webcam.
 
     Args:
@@ -31,20 +32,26 @@ def run(self: Actor) -> None:
     # These are lists that are for this actor to hold onto whatever graphical objects and actors it spawns off.
     # TODO: use sentinels in future Python?
     paper_highlight_shape_id: int | None = None
-    spawned_actors: list[Actor] = []
+    sent_draw_request = False
+    spawned_actors: list[Actor[Message]] = []
 
     # Handle incoming messages
     while True:
         message = self.recieve()
-        logger.debug("run has been gotten {message}")
+        logger.debug(f"run has been gotten {message}")
         match message:
             case KillMessage():
                 break
             case PaperLocationMessage(paper_location):
                 # Highlight the paper in white
                 if paper_highlight_shape_id is None:
-                    drawing_queue.put(AddPolygonMessage(self, paper_location))
+                    if sent_draw_request == False:
+                        drawing_queue.put(
+                            AddPolygonMessage(self, paper_location)
+                        )
+                        sent_draw_request = True
                 else:
+                    assert sent_draw_request
                     drawing_queue.put(
                         UpdatePolygonMessage(
                             self, paper_highlight_shape_id, paper_location

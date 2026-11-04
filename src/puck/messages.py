@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from enum import Enum
 from queue import Queue
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 lazy from .actor import Actor
 from .geometry import Polygon
@@ -19,7 +19,7 @@ class KillMessage(Message):
 
 @dataclass
 class DrawingQueueMessage(Message):
-    sender: Actor
+    sender: Actor[Message]
 
 
 @dataclass

@@ -1,2 +1,4 @@
 **/__pycache__/
 **/invalid_AprilTag*.png
+invalid_AprilTag*.png
+data/camera_cal.npy

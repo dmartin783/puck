@@ -45,7 +45,7 @@ This module handles all of the geometric commands Puck uses. It will be called i
 To read more about this module please read the docstring at the beginning of the Geometry module.
 
 ## Actor System
-Inspired by Erlang's actor system, we have implemented an Actor class which extends the Python thread class. It has a generalized Actor class as well as a more specific DrawingActor subsclass which directly interacts with graphics generation. Both, as extensions of threads, need a target function which they will run upon calling `[actor].start()`. This allows each program to run in its own thread and communicate with each other and the main thread with message passing.
+Inspired by Erlang's actor system, we have implemented an Actor class which extends the Python thread class. It has a generalized Actor class as well as a more specific DrawingActor subsclass which directly interacts with graphics generation. Both, as extensions of threads, need a target function (commonly called a process) which they will run upon calling `[actor].start()`. This allows each program to run in its own thread and communicate with each other and the main thread with message passing. 
 
 To read more about this please read the docstring at the beginning of the Actor module.
 

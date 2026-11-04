@@ -12,7 +12,7 @@ base = Tk()
 import importlib
 import json
 import logging
-from datetime import datetime
+from pickle import UnpicklingError
 from queue import Queue
 
 # External packages
@@ -26,6 +26,8 @@ from .calibration.calibrate import CalibrationInfo, calibrate
 
 # Local packages and modules
 from .geometry import Point, Polygon, ordered_rectangle
+from .actor import Actor
+from .calibration.calibrate import calibrate, CalibrationInfo
 from .messages import *
 
 # Global variables
@@ -235,8 +237,8 @@ def tags_to_paper_encoding(tags: list[int]) -> int | None:
     # Reorder based on the position of the APRIL_LIMIT tag
     pos = tags.index(APRIL_LIMIT)
     ordered_tags = tags[pos + 1 :] + tags[:pos]
-    print(f"Unordered Tags: {tags}")
-    print(f"Ordered Tags: {ordered_tags}")
+    logger.debug(f"Unordered Tags: {tags}")
+    logger.debug(f"Ordered Tags: {ordered_tags}")
 
     # Convert into int by using tags as base-APRIL_LIMIT digits
     program_encoding = sum(tag * APRIL_LIMIT**i for i, tag in enumerate(ordered_tags))
@@ -249,7 +251,7 @@ def tags_to_paper_encoding(tags: list[int]) -> int | None:
 def create_and_update_actors(
     program_encoding: int,
     current_coords: Polygon,
-    encoding_to_actor: dict[str, Actor],
+    encoding_to_actor: dict[str, Actor[Message]],
     program_lookup: list[str],
     drawing_queue: Queue[Message],
     pres_draw_queue: Queue[Message],  # TODO :: HACKY
@@ -342,7 +344,7 @@ def draw(drawing_queue: Queue[Message], canvas: Canvas) -> None:
 
 def update(
     cam: cv.VideoCapture,
-    encoding_to_actor: dict[str, Actor],
+    encoding_to_actor: dict[str, Actor[Message]],
     program_lookup: list[str],
     drawing_queue: Queue[Message],
     canvas: Canvas,
@@ -384,7 +386,7 @@ def update(
     if cv.waitKey(1) == ord("q"):
         logger.info("In the stopping condition")
         for encoding, a in encoding_to_actor.items():
-            a.end()
+            a.send(KillMessage())
             logger.info(f"encoding asscoiated is : {encoding}")
             logger.info("Got past the end, onto Join now")
             a.join()
@@ -412,6 +414,7 @@ def start_puck(
     log_level: int = 0,
     camera_id: int = 0,
     program_lookup_file: str = "data/program_lookup.json",
+    camera_calibration: str = "data/camera_cal.npy",
 ) -> None:
     """Runs the puck recognition system"""
 
@@ -424,7 +427,7 @@ def start_puck(
 
     tk_setup()
     program_lookup = load_program_names(program_lookup_file)
-    encoding_to_actor: dict[str, Actor] = {}
+    encoding_to_actor: dict[str, Actor[Message]] = {}
     canvas = canvas_setup(base)
     drawing_queue: Queue[Message] = Queue()
     pres_canvas: Canvas = canvas_setup(base)  # TODO :: HACKY
@@ -432,9 +435,19 @@ def start_puck(
     calibration_info = calibrate()
     cam = camera_setup(camera_id)
     camera_perspective_window_setup(CAMERA_PERSPECTIVE_WINDOW_NAME)
+    try:
+        calibration_info = CalibrationInfo.load(camera_calibration)
+    except OSError:
+        calibration_info = calibrate()
+        calibration_info.save(camera_calibration)
+    except UnpicklingError:
+        logger.fatal(
+            f"{camera_calibration} does not contain a calibration matrix. Terminating."
+        )
+        return
     homography_matrix = calibration_info.camera_to_projector_homography
     if homography_matrix.all() == None:
-        logger.fatal(msg="Homography Matrix failed to generate, nothing will work.")
+        logger.fatal("Homography Matrix failed to generate. Terminating.")
 
     # Start the main update loop soons
     base.after(
