@@ -3,7 +3,7 @@ from enum import Enum
 from queue import Queue
 from typing import Any, TYPE_CHECKING
 
-from .actor import Actor
+lazy from .actor import Actor
 from .geometry import Polygon
 
 
@@ -45,4 +45,9 @@ class CanvasIdMessage(Message):
 
 @dataclass
 class DrawingQueueReferenceMessage(Message):
-    drawing_queue: Queue[Message]
+    drawing_queue: Queue[DrawingQueueMessage]
+
+@dataclass
+class InformationMessage(Message):
+    name: str
+    data: Any

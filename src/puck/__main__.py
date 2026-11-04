@@ -1,5 +1,10 @@
 # Setup tkinter early (necessary on MacOS).
-from tkinter import Tk, Canvas
+import tkinter as tk
+from tkinter import Canvas, Tk
+
+from PIL import Image, ImageTk
+
+from puck.programs.ppitw.presentation import UpdateSlideMessage
 
 base = Tk()
 
@@ -14,8 +19,10 @@ from queue import Queue
 import cv2 as cv
 import numpy as np
 import typer
-from datetime import datetime
 from numpy.typing import NDArray
+
+from .actor import Actor
+from .calibration.calibrate import CalibrationInfo, calibrate
 
 # Local packages and modules
 from .geometry import Point, Polygon, ordered_rectangle
@@ -27,7 +34,7 @@ from .messages import *
 logger = logging.getLogger(__name__)
 DICT = cv.aruco.getPredefinedDictionary(cv.aruco.DICT_APRILTAG_16H5)
 APRIL_LIMIT = 4
-TICK_LENGTH = 16
+TICK_LENGTH = 1
 CANVAS_HEIGHT, CANVAS_WIDTH = 1080, 1920
 CAMERA_PERSPECTIVE_WINDOW_NAME = "Camera perspective"
 
@@ -75,9 +82,7 @@ def canvas_setup(base: Tk) -> Canvas:
     Args:
         base: an instance of Tk(), also commonly referred to as "root".
     """
-    canvas = Canvas(
-        base, height=CANVAS_HEIGHT, width=CANVAS_WIDTH, background="black"
-    )
+    canvas = Canvas(base, height=CANVAS_HEIGHT, width=CANVAS_WIDTH, background="black")
 
     # Allows canvas to be seen by the user.
     canvas.pack()
@@ -159,8 +164,11 @@ def detect_paper_tags(
     Returns:
         A list of papers and their associated list of four tags
     """
+    logger.debug("detecting paper tags")
+
     april_tag_detector = cv.aruco.ArucoDetector(dictionary=DICT)
     tags, ids, _ = april_tag_detector.detectMarkers(frame)
+    logger.debug(f"{ids = }")
     if ids is None:
         return []
     else:
@@ -171,14 +179,10 @@ def detect_paper_tags(
             bad_ids = [ids[i] for i in bad_indices]
             logger.warning(f"Invalid AprilTag Value(s): {bad_ids} detected")
             copy = cv.aruco.drawDetectedMarkers(frame, tags, ids)
-            cv.imwrite(
-                f"invalid_AprilTag_{datetime.now().isoformat()}.png", copy
-            )
+            cv.imwrite(f"invalid_AprilTag_{datetime.now().isoformat()}.png", copy)
 
         # Assemble required data in lists, filtering out any bad IDs
-        ids_list = [
-            int(ids[i]) for i in range(len(ids)) if i not in bad_indices
-        ]
+        ids_list = [int(ids[i]) for i in range(len(ids)) if i not in bad_indices]
         tag_shapes: list[Polygon] = [
             Polygon.from_array(tags[i][0])
             for i in range(len(tags))
@@ -237,9 +241,7 @@ def tags_to_paper_encoding(tags: list[int]) -> int | None:
     logger.debug(f"Ordered Tags: {ordered_tags}")
 
     # Convert into int by using tags as base-APRIL_LIMIT digits
-    program_encoding = sum(
-        tag * APRIL_LIMIT**i for i, tag in enumerate(ordered_tags)
-    )
+    program_encoding = sum(tag * APRIL_LIMIT**i for i, tag in enumerate(ordered_tags))
     assert type(program_encoding) is int
 
     logger.debug(f"Raw id: {tags} to interpreted id: {program_encoding}")
@@ -252,12 +254,13 @@ def create_and_update_actors(
     encoding_to_actor: dict[str, Actor[Message]],
     program_lookup: list[str],
     drawing_queue: Queue[Message],
+    pres_draw_queue: Queue[Message],  # TODO :: HACKY
+    homography_matrix: np.ndarray,  # TODO :: HACKY
+    frame: np.ndarray,  # TODO :: HACKY
 ) -> None:
     """Creates or updates Actors associated with a given program encoding"""
     if program_encoding >= len(program_lookup) or program_encoding < 0:
-        print(
-            f"There is no associated program with the encoding: {program_encoding}"
-        )
+        print(f"There is no associated program with the encoding: {program_encoding}")
         return
 
     # TODO: use this to load modules dynamically
@@ -271,8 +274,40 @@ def create_and_update_actors(
         t.start()
         # TODO: pass as environment on construction instead
         t.send(DrawingQueueReferenceMessage(drawing_queue))
+        t.send(DrawingQueueReferenceMessage(pres_draw_queue))
+        t.send(InformationMessage("homography_matrix", homography_matrix))
 
     t.send(PaperLocationMessage(current_coords))
+    t.send(InformationMessage("frame", frame))  # TODO :: HACKY
+
+
+def draw_pres_view(drawing_queue: Queue[Message], canvas: Canvas) -> None:
+    """Draws the commands on the drawing queue onto the canvas."""
+    if not drawing_queue.empty():  # TODO: change to 'while'
+        message = drawing_queue.get()
+        logger.debug(f"draw loop got message {message}")
+
+        if not isinstance(type(message), DrawingQueueMessage):
+            ...
+            # Wierd threading thing if this is an assert?
+            # Race condition something or other?
+
+        match message:
+            case UpdateSlideMessage(sender, slide):
+                assert slide.slide_content is not None
+                # https://stackoverflow.com/questions/28670461/read-an-image-with-opencv-and-display-it-with-tkinter
+                img = cv.cvtColor(slide.slide_content, cv.COLOR_BGR2RGB)
+                im = Image.fromarray(img)
+                tkimg = ImageTk.PhotoImage(image=im)  # TODO :: Pick up from here.
+
+                canvas.create_image(0, 0, anchor=tk.NW, image=tkimg)
+                sender.send(CanvasIdMessage(-1))
+
+            case _:
+                logger.error(f"Unexpected message {message}")
+
+        logger.debug("drawing loop finished")
+    canvas.pack()
 
 
 def draw(drawing_queue: Queue[Message], canvas: Canvas) -> None:
@@ -281,7 +316,10 @@ def draw(drawing_queue: Queue[Message], canvas: Canvas) -> None:
         message = drawing_queue.get()
         logger.debug(f"draw loop got message {message}")
 
-        assert issubclass(type(message), DrawingQueueMessage)
+        if not isinstance(type(message), DrawingQueueMessage):
+            ...
+            # Wierd threading thing if this is an assert?
+            # Race condition something or other?
 
         match message:
             case AddPolygonMessage(sender, shape):
@@ -310,6 +348,8 @@ def update(
     program_lookup: list[str],
     drawing_queue: Queue[Message],
     canvas: Canvas,
+    pres_draw_queue: Queue[Message],  # TODO :: HACKY
+    pres_canvas: Canvas,  # TODO :: HACKY
     window_name: str,
     homography_matrix: np.ndarray,
 ) -> None:
@@ -320,6 +360,8 @@ def update(
     _, frame = cam.read()
     cv.imshow(window_name, frame)
     frame = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
+
+    assert frame is not None
 
     # Recognise and execute papers
     for coords, tags in detect_paper_tags(frame, homography_matrix):
@@ -332,9 +374,13 @@ def update(
                 encoding_to_actor,
                 program_lookup,
                 drawing_queue,
+                pres_draw_queue,  # TODO :: HACKY
+                homography_matrix,  # TODO :: This is very hacky
+                frame,  # TODO :: THis also
             )
 
     draw(drawing_queue, canvas)
+    draw_pres_view(pres_draw_queue, pres_canvas)  # TODO :: HACKY
 
     # Handle quitting
     if cv.waitKey(1) == ord("q"):
@@ -356,6 +402,8 @@ def update(
         program_lookup,
         drawing_queue,
         canvas,
+        pres_draw_queue,  # TODO :: HACKY
+        pres_canvas,
         window_name,
         homography_matrix,
     )
@@ -370,6 +418,9 @@ def start_puck(
 ) -> None:
     """Runs the puck recognition system"""
 
+    log = True
+    camera_id = 1
+
     # Generic print to make sure that everything is working
     print("Hello from puck!")
     logging_setup(log, log_level)
@@ -379,6 +430,9 @@ def start_puck(
     encoding_to_actor: dict[str, Actor[Message]] = {}
     canvas = canvas_setup(base)
     drawing_queue: Queue[Message] = Queue()
+    pres_canvas: Canvas = canvas_setup(base)  # TODO :: HACKY
+    pres_draw_queue: Queue[Message] = Queue()  # TODO :: HACKY
+    calibration_info = calibrate()
     cam = camera_setup(camera_id)
     camera_perspective_window_setup(CAMERA_PERSPECTIVE_WINDOW_NAME)
     try:
@@ -404,6 +458,8 @@ def start_puck(
         program_lookup,
         drawing_queue,
         canvas,
+        pres_draw_queue,  # TODO :: HACKY
+        pres_canvas,  # TODO :: HACKY
         CAMERA_PERSPECTIVE_WINDOW_NAME,
         homography_matrix,
     )
