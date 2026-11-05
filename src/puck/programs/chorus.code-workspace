@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"path": "../../../../../chorus/chorus"
+		},
+		{
+			"path": "../../../.."
+		}
+	],
+	"settings": {
+		"chat.disableAIFeatures": true
+	}
+}

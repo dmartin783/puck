@@ -15,8 +15,9 @@ import logging
 # # Every file has a logger.
 # logger = logging.getLogger(__name__)
 
-def run(proxy_arg):
-    pass
+def run():
+    while True:
+        print("blarp")
 # def run(self: Actor[Message]) -> None:
 #     """Target function for an actor that just tracks a paper on the webcam.
 

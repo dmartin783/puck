@@ -10,7 +10,7 @@ authors = [
 ]
 requires-python = ">=3.14"
 dependencies = [
-    "chorus-actors>=0.1.1",
+    "chorus-actors",
     "matplotlib>=3.11.2",
     "opencv-python>=5.0.0.93",
     "screeninfo>=0.8.1",
@@ -37,3 +37,6 @@ warn_unused_configs = true
 
 [tool.ruff]
 line-length = 79
+
+[tool.uv.sources]
+chorus-actors = { path = "../../chorus/chorus", editable = true }

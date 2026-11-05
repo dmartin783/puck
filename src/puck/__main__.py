@@ -23,7 +23,7 @@ import chorus
 from .geometry import Point, Polygon, ordered_rectangle
 from .calibration.calibrate import calibrate, CalibrationInfo
 from .camera_processor import camera_setup, show_camera_pov,process_frame
-from .spatial_model import SpatialModel
+from .spatial_model import SpatialModel, PaperRecord
 
 # Global variables
 logger = logging.getLogger(__name__)
@@ -129,6 +129,7 @@ def update(
     encoding_to_actor_id: dict[str,chorus.ActorID],
     canvas: Canvas,
     homography_matrix: np.ndarray,
+    spatial_model: SpatialModel
 ) -> None:
     """Updates the system with event using visual input from the camera."""
     logger.debug("Called the Update Function")
@@ -138,16 +139,19 @@ def update(
     show_camera_pov(frame)
     
 #     # Recognise and execute papers
-    for ordered_shape_list, program_encoding in process_frame(frame, homography_matrix):
-        if program_encoding:
-            logger.debug(f"Saw program encoding, {program_encoding}")
-            spatial_model.tell.update(program_encoding, ordered_shape_list)
+    paper_records = [PaperRecord(program_encoding,ordered_shape_list) 
+                     for ordered_shape_list, program_encoding in 
+                     process_frame(frame, homography_matrix) if program_encoding]
+    spatial_model.tell.update(paper_records)
 
     # draw(drawing_queue, canvas) ## LOOK INTO
 
 #     # Handle quitting
     if cv.waitKey(1) == ord("q"):
         logger.info("In the stopping condition") 
+        spatial_model.tell.dummy()
+        spatial_model.tell.kill_all()
+        spatial_model.kill()
         # If crashing due to thread conditions, please consider .join
         base.quit()
 
@@ -159,11 +163,12 @@ def update(
         encoding_to_actor_id,
         canvas,
         homography_matrix,
+        spatial_model
     )
 
 def start_puck(
-    log: bool = False,
-    log_level: int = 0,
+    log: bool = True,
+    log_level: int = 20,
     camera_id: int = 0,
     camera_calibration: str = "data/camera_cal.npy",
 ) -> None:
@@ -190,6 +195,7 @@ def start_puck(
         encoding_to_actor_id,
         canvas,
         homography_matrix,
+        spatial_model
     )
 
     # Start the event loop
@@ -198,6 +204,7 @@ def start_puck(
     cam.release()
     cv.destroyAllWindows()
 
+# @chorus.actors
 def main_like():
     chorus.run_main(start_puck)
 
