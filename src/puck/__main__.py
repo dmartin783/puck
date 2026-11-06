@@ -87,9 +87,7 @@ def update(
     # Handle quitting
     if cv.waitKey(1) == ord("q"):
         logger.info("In the stopping condition")
-        spatial_model.tell.dummy()
         spatial_model.tell.kill_all()
-        spatial_model.kill()
         # If crashing due to thread conditions, please consider .join
         base.quit()
 

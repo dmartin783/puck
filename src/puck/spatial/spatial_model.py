@@ -7,6 +7,7 @@ from chorus import ActorID, spawn, terminate, me, Proxy
 
 from ..geometry import Polygon
 
+KILL_TIME = 100
 PROGRAM_LOOKUP_FILE = "./data/program_lookup.json"
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,8 @@ class SpatialModel:
     )
     encoding_to_actor_id: dict[int, ActorID] = field(default_factory=dict)
 
+    actor_id_time_since_seen: dict[ActorID, int]= field(default_factory=dict)
+
     def update(self, visible_papers: list[PaperRecord]):
         actor_id_to_seen: dict[ActorID, bool] = {
             aid: False for aid in self.actor_id_to_paper_record
@@ -60,26 +63,31 @@ class SpatialModel:
                 module_name = "puck.programs." + program_lookup[paper.encoding]
                 module = importlib.import_module(module_name)
                 aid = spawn(module.run, Proxy(me()), Proxy(self.main))
-                self.actor_id_to_paper_record[aid] = paper
-                self.encoding_to_paper_record[paper.encoding] = paper
                 self.encoding_to_actor_id[paper.encoding] = aid
-                actor_id_to_seen[aid] = True
             else:
                 aid = self.encoding_to_actor_id[paper.encoding]
-                actor_id_to_seen[aid] = True
+                
+            actor_id_to_seen[aid] = True
+            self.actor_id_to_paper_record[aid] = paper
+            self.encoding_to_paper_record[paper.encoding] = paper
+            self.actor_id_time_since_seen[aid] = 0
+
         for aid in [aid for aid, seen in actor_id_to_seen.items() if not seen]:
-            terminate(aid)
-            actor_id_to_encoding = invert_dict(self.encoding_to_actor_id)
-            encoding = actor_id_to_encoding[aid]
-            del self.actor_id_to_paper_record[aid]
-            del self.encoding_to_actor_id[encoding]
-            del self.encoding_to_paper_record[encoding]
-            logger.info(f"{aid} terminated.")
+            self.actor_id_time_since_seen[aid] += 1
+            if self.actor_id_time_since_seen[aid] > KILL_TIME:
+                terminate(aid)
+                actor_id_to_encoding = invert_dict(self.encoding_to_actor_id)
+                encoding = actor_id_to_encoding[aid]
+                del self.actor_id_to_paper_record[aid]
+                del self.encoding_to_actor_id[encoding]
+                del self.encoding_to_paper_record[encoding]
+                del self.actor_id_time_since_seen[aid]
+                logger.info(f"{aid} terminated because not seen")
 
     def kill_all(self):
         for aid in self.actor_id_to_paper_record.keys():
             terminate(aid)
-            logger.info(f"{aid} terminated.")
+            logger.info(f"{aid} terminated because puck ended")
 
     def corners(self, aid):
         paper_record = self.actor_id_to_paper_record[aid]
