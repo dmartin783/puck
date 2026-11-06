@@ -28,20 +28,21 @@ def camera_perspective_window_setup(window_name: str) -> None:
     cv.moveWindow(window_name, 0, 300)
     cv.resizeWindow(window_name, 600, 500)
 
+
 def show_camera_pov(frame):
     cv.imshow(CAMERA_PERSPECTIVE_WINDOW_NAME, frame)
 
 
-
-def camera_setup(camera_id: int, 
-    camera_calibration: str = "data/camera_cal.npy") -> cv.VideoCapture:
+def camera_setup(
+    camera_id: int, camera_calibration: str = "data/camera_cal.npy"
+) -> cv.VideoCapture:
     """Set up your camera to get a videofeed input.
 
-    Args:
-        camera_id (int): camera id, typically 0 or 1
-s
-    Returns:
-        cv.VideoCapture: video feed
+        Args:
+            camera_id (int): camera id, typically 0 or 1
+    s
+        Returns:
+            cv.VideoCapture: video feed
     """
     cam = cv.VideoCapture(camera_id)
 
@@ -65,7 +66,7 @@ s
     if homography_matrix.all() == None:
         logger.fatal("Homography Matrix failed to generate. Terminating.")
 
-    return homography_matrix,cam 
+    return homography_matrix, cam
 
 
 def average_pt(tag: Polygon) -> Point:
@@ -76,6 +77,7 @@ def average_pt(tag: Polygon) -> Point:
         sum_x += x
         sum_y += y
     return Point(int(sum_x / 4), int(sum_y / 4))
+
 
 def detect_paper_tags(
     frame: np.ndarray, homography_matrix: np.ndarray
@@ -123,22 +125,22 @@ def detect_paper_tags(
 
         assert len(ids_list) == len(transformed_tag_shapes)
 
-
         if len(ids_list) == 4:
-
-            average_to_shape= {}
+            average_to_shape = {}
             average_paper_list = []
             for shape in transformed_tag_shapes:
                 avg = average_pt(shape)
                 average_paper_list.append(avg)
                 average_to_shape.update({avg: shape})
             averaged_paper = Polygon(average_paper_list)
-            
+
             ordered_averaged_paper, indices = ordered_rectangle(
                 averaged_paper, averaged_paper[0]
             )
 
-            average_point_list = [Point(x,y) for (x,y) in ordered_averaged_paper.unwrap()]
+            average_point_list = [
+                Point(x, y) for (x, y) in ordered_averaged_paper.unwrap()
+            ]
 
             ordered_shape_list = [None] * 4
             for avg, shape in average_to_shape.items():
@@ -216,4 +218,9 @@ def tags_to_paper_encoding(tags: list[int]) -> int | None:
 
 def process_frame(frame, homography_matrix):
     frame = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
-    return [(ordered_shape_list, tags_to_paper_encoding(tags)) for ordered_shape_list, tags in detect_paper_tags(frame, homography_matrix)]
+    return [
+        (ordered_shape_list, tags_to_paper_encoding(tags))
+        for ordered_shape_list, tags in detect_paper_tags(
+            frame, homography_matrix
+        )
+    ]
