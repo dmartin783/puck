@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.14"
 resolution-markers = [
     "python_full_version >= '3.15'",
@@ -78,6 +78,23 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/23/bf/b419c3205ce1143ba7c69baef4f0ba43c14d8712113bf34f9e0d27d609be/ast_serialize-0.11.2-cp39-abi3-win_amd64.whl", hash = "sha256:b9065dd23131a23b41f5bab3bf4e9b3c350a3fe8e36e8200eded9b729fcea484", size = 1165434, upload-time = "2026-09-13T18:48:52.169Z" },
     { url = "https://files.pythonhosted.org/packages/91/a7/c8bbb2173f7a7131b3b2412035b2d814ab5ef2ce9799bd06f07c451640e4/ast_serialize-0.11.2-cp39-abi3-win_arm64.whl", hash = "sha256:dab599cbdcb7b45b18c41fad746645580b3a24357082b7f0e8921cd373804f27", size = 1136031, upload-time = "2026-09-13T18:48:54.04Z" },
 ]
+
+[[package]]
+name = "chorus-actors"
+version = "0.1.3"
+source = { editable = "../../chorus/chorus" }
+
+[package.metadata]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "mypy", specifier = ">=2.4.0" },
+    { name = "pytest", specifier = ">=9.1.1" },
+    { name = "ruff", specifier = ">=0.15.21" },
+    { name = "shibuya", specifier = ">=2026.7.12" },
+    { name = "sphinxcontrib-mermaid", specifier = ">=2.1.1" },
+]
+docs = [{ name = "sphinx", specifier = ">=9.1.0" }]
 
 [[package]]
 name = "colorama"
@@ -613,6 +630,7 @@ name = "puck"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "chorus-actors" },
     { name = "matplotlib" },
     { name = "opencv-python" },
     { name = "screeninfo" },
@@ -627,6 +645,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "chorus-actors", editable = "../../chorus/chorus" },
     { name = "matplotlib", specifier = ">=3.11.2" },
     { name = "opencv-python", specifier = ">=5.0.0.93" },
     { name = "screeninfo", specifier = ">=0.8.1" },
