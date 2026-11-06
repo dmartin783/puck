@@ -136,7 +136,7 @@ def show_image_on_projector_and_wait(
     cv2.waitKey(settle_ms)
 
 
-def calibrate(debug: bool = True) -> CalibrationInfo:
+def calibrate(camera=None, debug: bool = True) -> CalibrationInfo:
     """Calibrate the camera-to-projector mapping.
 
     Args:
@@ -163,8 +163,9 @@ def calibrate(debug: bool = True) -> CalibrationInfo:
     black_screen = np.zeros((projector.height, projector.width, 3), dtype=np.uint8)
 
     # camera
-    logger.info("Setting up camera")
-    camera = cv2.VideoCapture(1)
+    if camera is None:
+        logger.info("Setting up camera")
+        camera = cv2.VideoCapture(1)
     if not camera.isOpened():
         raise RuntimeError("Could not open camera")
 

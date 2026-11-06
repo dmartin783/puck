@@ -1,9 +1,9 @@
-from dataclasses import dataclass, field
 import importlib
 import json
 import logging
+from dataclasses import dataclass, field
 
-from chorus import ActorID, spawn, terminate, me, Proxy
+from chorus import ActorID, Proxy, me, spawn, terminate
 
 from ..geometry import Polygon
 
@@ -44,15 +44,14 @@ def invert_dict(my_dict):
 @dataclass
 class SpatialModel:
     main: ActorID
-    encoding_to_paper_record: dict[int, PaperRecord] = field(
-        default_factory=dict
-    )
-    actor_id_to_paper_record: dict[ActorID, PaperRecord] = field(
-        default_factory=dict
-    )
+    encoding_to_paper_record: dict[int, PaperRecord] = field(default_factory=dict)
+    actor_id_to_paper_record: dict[ActorID, PaperRecord] = field(default_factory=dict)
     encoding_to_actor_id: dict[int, ActorID] = field(default_factory=dict)
 
-    actor_id_time_since_seen: dict[ActorID, int]= field(default_factory=dict)
+    actor_id_time_since_seen: dict[ActorID, int] = field(default_factory=dict)
+
+    def get_encoding_to_actor_id(self) -> dict[int, ActorID]:
+        return self.encoding_to_actor_id
 
     def update(self, visible_papers: list[PaperRecord]):
         actor_id_to_seen: dict[ActorID, bool] = {
@@ -66,7 +65,7 @@ class SpatialModel:
                 self.encoding_to_actor_id[paper.encoding] = aid
             else:
                 aid = self.encoding_to_actor_id[paper.encoding]
-                
+
             actor_id_to_seen[aid] = True
             self.actor_id_to_paper_record[aid] = paper
             self.encoding_to_paper_record[paper.encoding] = paper
@@ -85,7 +84,7 @@ class SpatialModel:
                 logger.info(f"{aid} terminated because not seen")
 
     def kill_all(self):
-        for aid in self.actor_id_to_paper_record.keys():
+        for aid in self.actor_id_to_paper_record:
             terminate(aid)
             logger.info(f"{aid} terminated because puck ended")
 

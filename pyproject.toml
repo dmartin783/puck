@@ -4,17 +4,17 @@ version = "0.1.0"
 description = "Open-source programmable space from the University of St Andrews."
 readme = "README.md"
 authors = [
-    { name = "Julia Dreiling", email = "jmcd1@st-andrews.ac.uk" },
-    { name = "David Morrison", email = "dm236@st-andrews.ac.uk" },
-    { name = "Michael Young", email = "mct25@st-andrews.ac.uk" },
+  { name = "Julia Dreiling", email = "jmcd1@st-andrews.ac.uk" },
+  { name = "David Morrison", email = "dm236@st-andrews.ac.uk" },
+  { name = "Michael Young", email = "mct25@st-andrews.ac.uk" },
 ]
 requires-python = ">=3.14"
 dependencies = [
-    "chorus-actors",
-    "matplotlib>=3.11.2",
-    "opencv-python>=5.0.0.93",
-    "screeninfo>=0.8.1",
-    "typer>=0.27.2",
+  "chorus-actors",
+  "matplotlib>=3.11.2",
+  "opencv-python>=5.0.0.93",
+  "screeninfo>=0.8.1",
+  "typer>=0.27.2",
 ]
 
 [project.scripts]
@@ -25,10 +25,7 @@ requires = ["uv_build>=0.12.11,<0.13.0"]
 build-backend = "uv_build"
 
 [dependency-groups]
-dev = [
-    "mypy>=2.4.0",
-    "ruff>=0.16.8",
-]
+dev = ["mypy>=2.4.0", "ruff>=0.16.8"]
 
 [tool.mypy]
 strict = true
@@ -37,6 +34,3 @@ warn_unused_configs = true
 
 [tool.ruff]
 line-length = 79
-
-[tool.uv.sources]
-chorus-actors = { path = "../../chorus/chorus", editable = true }

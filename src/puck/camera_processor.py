@@ -1,15 +1,16 @@
 # Standard packages
 import logging
+from datetime import datetime
+from pickle import UnpicklingError
 
 # External Packages
 import cv2 as cv
-from pickle import UnpicklingError
 import numpy as np
-from datetime import datetime
+
+from .calibration.calibrate import CalibrationInfo, calibrate
 
 # Local packages and modules
 from .geometry import Point, Polygon, ordered_rectangle
-from .calibration.calibrate import calibrate, CalibrationInfo
 
 # Global Variables
 logger = logging.getLogger(__name__)
@@ -54,13 +55,11 @@ def camera_setup(
     try:
         calibration_info = CalibrationInfo.load(camera_calibration)
     except OSError:
-        calibration_info = calibrate()
+        calibration_info = calibrate(camera=cam)
         calibration_info.save(camera_calibration)
     except UnpicklingError:
-        logger.fatal(
-            f"{camera_calibration} does not contain a calibration matrix.\
-            Terminating."
-        )
+        logger.fatal(f"{camera_calibration} does not contain a calibration matrix.\
+            Terminating.")
         return
     homography_matrix = calibration_info.camera_to_projector_homography
     if homography_matrix.all() == None:
@@ -106,14 +105,10 @@ def detect_paper_tags(
             bad_ids = [ids[i] for i in bad_indices]
             logger.warning(f"Invalid AprilTag Value(s): {bad_ids} detected")
             copy = cv.aruco.drawDetectedMarkers(frame, tags, ids)
-            cv.imwrite(
-                f"invalid_AprilTag_{datetime.now().isoformat()}.png", copy
-            )
+            cv.imwrite(f"invalid_AprilTag_{datetime.now().isoformat()}.png", copy)
 
         # Assemble required data in lists, filtering out any bad IDs
-        ids_list = [
-            int(ids[i]) for i in range(len(ids)) if i not in bad_indices
-        ]
+        ids_list = [int(ids[i]) for i in range(len(ids)) if i not in bad_indices]
         tag_shapes: list[Polygon] = [
             Polygon.from_array(tags[i][0])
             for i in range(len(tags))
@@ -207,20 +202,16 @@ def tags_to_paper_encoding(tags: list[int]) -> int | None:
     logger.debug(f"Ordered Tags: {ordered_tags}")
 
     # Convert into int by using tags as base-APRIL_LIMIT digits
-    program_encoding = sum(
-        tag * APRIL_LIMIT**i for i, tag in enumerate(ordered_tags)
-    )
+    program_encoding = sum(tag * APRIL_LIMIT**i for i, tag in enumerate(ordered_tags))
     assert type(program_encoding) is int
 
     logger.debug(f"Raw id: {tags} to interpreted id: {program_encoding}")
     return program_encoding
 
 
-def process_frame(frame, homography_matrix):
+def process_frame(frame, homography_matrix) -> list[tuple[Polygon, int | None]]:
     frame = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
     return [
         (ordered_shape_list, tags_to_paper_encoding(tags))
-        for ordered_shape_list, tags in detect_paper_tags(
-            frame, homography_matrix
-        )
+        for ordered_shape_list, tags in detect_paper_tags(frame, homography_matrix)
     ]

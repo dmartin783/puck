@@ -1,4 +1,5 @@
-from chorus import me, Proxy
+from chorus import Proxy, me
+
 from ..geometry import Polygon
 
 

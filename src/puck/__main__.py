@@ -1,29 +1,30 @@
 # Setup tkinter early (necessary on MacOS).
 import tkinter as tk
+from queue import Queue
 from tkinter import Canvas, Tk
 
 from PIL import Image, ImageTk
 
-from puck.programs.ppitw.presentation import UpdateSlideMessage
+# from puck.programs.ppitw.presentation import UpdateSlideMessage
 
 base = Tk()
 
 # Standard packages
 import logging
 
+import chorus
+
 # External packages
 import cv2 as cv
 import numpy as np
 import typer
-import chorus
 from numpy.typing import NDArray
 
-from .actor import Actor
 from .calibration.calibrate import CalibrationInfo, calibrate
 
 # Local packages and modules
-from .camera_processor import camera_setup, show_camera_pov, process_frame
-from .spatial.spatial_model import SpatialModel, PaperRecord
+from .camera_processor import camera_setup, process_frame, show_camera_pov
+from .spatial.spatial_model import PaperRecord, SpatialModel
 
 # Global variables
 logger = logging.getLogger(__name__)
@@ -68,11 +69,8 @@ def canvas_setup(base: Tk) -> Canvas:
 
 def update(
     cam: cv.VideoCapture,
-    encoding_to_actor_id: dict[str, chorus.ActorID],
     canvas: Canvas,
-    pres_draw_queue: Queue[Message],  # TODO :: HACKY
-    pres_canvas: Canvas,  # TODO :: HACKY
-    window_name: str,
+    pres_draw_queue: Queue,  # TODO :: HACKY
     homography_matrix: np.ndarray,
     spatial_model: SpatialModel,
 ) -> None:
@@ -93,7 +91,16 @@ def update(
         )
         if program_encoding
     ]
+
     spatial_model.tell.update(paper_records)
+
+    aids = spatial_model.ask.get_encoding_to_actor_id()
+    logger.info(f"{aids = }")
+    if aids:
+        ppitw_aid = aids[3]
+        logger.info(f"{ppitw_aid = }")
+        chorus.send(ppitw_aid, ("frame", frame))
+
     chorus.process_pending([canvas])
 
     # Handle quitting
@@ -108,11 +115,8 @@ def update(
         TICK_LENGTH,
         update,
         cam,
-        encoding_to_actor_id,
         canvas,
         pres_draw_queue,  # TODO :: HACKY
-        pres_canvas,
-        window_name,
         homography_matrix,
         spatial_model,
     )
@@ -137,21 +141,18 @@ def start_puck(
     canvas = canvas_setup(base)
     print(chorus.me())
     homography_matrix, cam = camera_setup(camera_id, camera_calibration)
-    spatial_model = chorus.spawn_server_with_proxy(
-        [SpatialModel(main=chorus.me())]
-    )
-    chorus.process_pending([canvas])
+    spatial_model = chorus.spawn_server_with_proxy([SpatialModel(main=chorus.me())])
+    chorus.process_pending([canvas])  # -- Process any messages to the canvas? maybe...
+
+    pres_draw_queue = Queue()
 
     # Start the main update loop soons
     base.after(
         TICK_LENGTH,
         update,
         cam,
-        encoding_to_actor_id,
         canvas,
         pres_draw_queue,  # TODO :: HACKY
-        pres_canvas,  # TODO :: HACKY
-        CAMERA_PERSPECTIVE_WINDOW_NAME,
         homography_matrix,
         spatial_model,
     )
