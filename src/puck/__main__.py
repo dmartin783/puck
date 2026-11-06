@@ -1,5 +1,10 @@
 # Setup tkinter early (necessary on MacOS).
-from tkinter import Tk, Canvas
+import tkinter as tk
+from tkinter import Canvas, Tk
+
+from PIL import Image, ImageTk
+
+from puck.programs.ppitw.presentation import UpdateSlideMessage
 
 base = Tk()
 
@@ -11,6 +16,10 @@ import cv2 as cv
 import numpy as np
 import typer
 import chorus
+from numpy.typing import NDArray
+
+from .actor import Actor
+from .calibration.calibrate import CalibrationInfo, calibrate
 
 # Local packages and modules
 from .camera_processor import camera_setup, show_camera_pov, process_frame
@@ -50,9 +59,7 @@ def canvas_setup(base: Tk) -> Canvas:
     Args:
         base: an instance of Tk(), also commonly referred to as "root".
     """
-    canvas = Canvas(
-        base, height=CANVAS_HEIGHT, width=CANVAS_WIDTH, background="black"
-    )
+    canvas = Canvas(base, height=CANVAS_HEIGHT, width=CANVAS_WIDTH, background="black")
 
     # Allows canvas to be seen by the user.
     canvas.pack()
@@ -63,6 +70,9 @@ def update(
     cam: cv.VideoCapture,
     encoding_to_actor_id: dict[str, chorus.ActorID],
     canvas: Canvas,
+    pres_draw_queue: Queue[Message],  # TODO :: HACKY
+    pres_canvas: Canvas,  # TODO :: HACKY
+    window_name: str,
     homography_matrix: np.ndarray,
     spatial_model: SpatialModel,
 ) -> None:
@@ -72,6 +82,8 @@ def update(
     # Get a frame
     _, frame = cam.read()
     show_camera_pov(frame)
+
+    assert frame is not None
 
     # Recognise and execute papers
     paper_records = [
@@ -98,6 +110,9 @@ def update(
         cam,
         encoding_to_actor_id,
         canvas,
+        pres_draw_queue,  # TODO :: HACKY
+        pres_canvas,
+        window_name,
         homography_matrix,
         spatial_model,
     )
@@ -110,6 +125,9 @@ def start_puck(
     camera_calibration: str = "data/camera_cal.npy",
 ) -> None:
     """Runs the puck recognition system"""
+
+    log = True
+    camera_id = 1
 
     # Generic print to make sure that everything is working
     print("Hello from puck!")
@@ -131,6 +149,9 @@ def start_puck(
         cam,
         encoding_to_actor_id,
         canvas,
+        pres_draw_queue,  # TODO :: HACKY
+        pres_canvas,  # TODO :: HACKY
+        CAMERA_PERSPECTIVE_WINDOW_NAME,
         homography_matrix,
         spatial_model,
     )
