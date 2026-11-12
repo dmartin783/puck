@@ -24,12 +24,6 @@ def update_polygon(canvas: Proxy, graphical_id: int, polygon: Polygon):
     canvas.tell.coords(graphical_id, points)
 
 
-def images(spatial: Proxy) -> list[Polygon]:
-    # images are associated with a program (PaperRecord)
-    images: list[Polygon] = spatial.ask.images(me())
-    return images
-
-
 def create_image(canvas: Proxy, slide: Slide) -> int:
     # image_id: int = canvas.ask.create_image(
     #     0, 0, image=slide.slide_content_tk, anchor=tk.NW

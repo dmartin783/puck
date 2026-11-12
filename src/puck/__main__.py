@@ -4,9 +4,7 @@ from dataclasses import dataclass
 from queue import Queue
 from tkinter import Canvas, Tk
 
-from PIL import Image, ImageTk
-
-from puck.programs.ppitw.slide import Slide
+from puck.programs.ppitw.presentation import PresView
 
 base = Tk()
 pres_topLevel = tk.Toplevel(base)
@@ -20,9 +18,6 @@ import chorus
 import cv2 as cv
 import numpy as np
 import typer
-from numpy.typing import NDArray
-
-from .calibration.calibrate import CalibrationInfo, calibrate
 
 # Local packages and modules
 from .camera_processor import camera_setup, process_frame, show_camera_pov
@@ -122,28 +117,6 @@ def update(
         homography_matrix,
         spatial_model,
     )
-
-
-@dataclass
-class PresView:
-    canvas: Canvas
-
-    def set_slide(self, slide: Slide) -> int:
-        logger.info("called set_slide")
-        assert slide.slide_content is not None
-        logger.info(f"{slide.slide_content_tk = }")
-        img_id = self.canvas.create_image(
-            0,
-            0,
-            anchor=tk.NW,
-            image=slide.slide_content_tk,
-        )
-
-        logger.info(f"{img_id = }")
-        return img_id
-
-    def update_slide(self, slide: Slide, id: int):
-        self.canvas.itemconfig(id, image=slide.slide_content_tk)
 
 
 def start_puck(
