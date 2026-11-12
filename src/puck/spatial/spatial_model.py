@@ -4,6 +4,7 @@ import logging
 from dataclasses import dataclass, field
 
 from chorus import ActorID, Proxy, me, spawn, terminate
+from PIL import Image
 
 from ..geometry import Polygon
 
@@ -43,6 +44,10 @@ def invert_dict(my_dict):
 
 @dataclass
 class SpatialModel:
+    """
+    Not actually a spatial model, simply a wrapper around program spawning
+    """
+
     main: ActorID
     encoding_to_paper_record: dict[int, PaperRecord] = field(default_factory=dict)
     actor_id_to_paper_record: dict[ActorID, PaperRecord] = field(default_factory=dict)
@@ -91,3 +96,12 @@ class SpatialModel:
     def corners(self, aid):
         paper_record = self.actor_id_to_paper_record[aid]
         return paper_record.tags
+
+
+@dataclass
+class SlideSpatial(SpatialModel):
+    """
+    main: ActorID is now slides.py main loop
+    encoding_to_paper_record is now dict from slide id to Slide object
+
+    """

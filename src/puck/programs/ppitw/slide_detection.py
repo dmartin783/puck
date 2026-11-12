@@ -276,7 +276,7 @@ def align_and_crop_slide(slide: Slide, frame: MatLike) -> Slide:
         cv.imwrite(f"rotated_{slide.id}.png", rotated)
         cv.imwrite(f"scaled_{slide.id}.png", scaled)
     # TODO :: REFACTOR AND UPSCALE
-    slide.slide_content = cropped
+    slide.slide_content = scaled
     return slide
 
 

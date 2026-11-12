@@ -1,13 +1,15 @@
 # Setup tkinter early (necessary on MacOS).
 import tkinter as tk
+from dataclasses import dataclass
 from queue import Queue
 from tkinter import Canvas, Tk
 
 from PIL import Image, ImageTk
 
-# from puck.programs.ppitw.presentation import UpdateSlideMessage
+from puck.programs.ppitw.slide import Slide
 
 base = Tk()
+pres_topLevel = tk.Toplevel(base)
 
 # Standard packages
 import logging
@@ -28,7 +30,7 @@ from .spatial.spatial_model import PaperRecord, SpatialModel
 
 # Global variables
 logger = logging.getLogger(__name__)
-TICK_LENGTH = 16
+TICK_LENGTH = 1
 CANVAS_HEIGHT, CANVAS_WIDTH = 1080, 1920
 
 
@@ -70,7 +72,7 @@ def canvas_setup(base: Tk) -> Canvas:
 def update(
     cam: cv.VideoCapture,
     canvas: Canvas,
-    pres_draw_queue: Queue,  # TODO :: HACKY
+    pres_view: PresView,
     homography_matrix: np.ndarray,
     spatial_model: SpatialModel,
 ) -> None:
@@ -101,7 +103,7 @@ def update(
         logger.info(f"{ppitw_aid = }")
         chorus.send(ppitw_aid, ("frame", frame))
 
-    chorus.process_pending([canvas])
+    chorus.process_pending([canvas, pres_view])
 
     # Handle quitting
     if cv.waitKey(1) == ord("q"):
@@ -116,10 +118,32 @@ def update(
         update,
         cam,
         canvas,
-        pres_draw_queue,  # TODO :: HACKY
+        pres_view,  # TODO :: HACKY
         homography_matrix,
         spatial_model,
     )
+
+
+@dataclass
+class PresView:
+    canvas: Canvas
+
+    def set_slide(self, slide: Slide) -> int:
+        logger.info("called set_slide")
+        assert slide.slide_content is not None
+        logger.info(f"{slide.slide_content_tk = }")
+        img_id = self.canvas.create_image(
+            0,
+            0,
+            anchor=tk.NW,
+            image=slide.slide_content_tk,
+        )
+
+        logger.info(f"{img_id = }")
+        return img_id
+
+    def update_slide(self, slide: Slide, id: int):
+        self.canvas.itemconfig(id, image=slide.slide_content_tk)
 
 
 def start_puck(
@@ -140,9 +164,14 @@ def start_puck(
     encoding_to_actor_id: dict[str, chorus.ActorID] = {}
     canvas = canvas_setup(base)
     print(chorus.me())
+    pres_view = PresView(canvas_setup(pres_topLevel))
+
+    logger.info(f"{pres_view = }")
+    #    return
     homography_matrix, cam = camera_setup(camera_id, camera_calibration)
     spatial_model = chorus.spawn_server_with_proxy([SpatialModel(main=chorus.me())])
-    chorus.process_pending([canvas])  # -- Process any messages to the canvas? maybe...
+
+    chorus.process_pending([canvas, pres_view])
 
     pres_draw_queue = Queue()
 
@@ -152,7 +181,7 @@ def start_puck(
         update,
         cam,
         canvas,
-        pres_draw_queue,  # TODO :: HACKY
+        pres_view,  # TODO :: HACKY
         homography_matrix,
         spatial_model,
     )
