@@ -29,6 +29,7 @@ class Slide:
     def slide_content(self) -> MatLike | None:
         return self._slide_content
 
+    # TODO :: I think this method is slower than i would like, maybe try testing for a minimum distance change before updating. WIll only matter when live updating slides maybe.
     @slide_content.setter
     def slide_content(self, img: MatLike):
         self._slide_content = img

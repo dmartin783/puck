@@ -4,6 +4,8 @@ import chorus
 import cv2 as cv
 from PIL import Image, ImageTk
 
+from puck.geometry import Point, Polygon, ordered_rectangle
+
 from ...spatial.api import (
     corners,
     create_image,
@@ -29,9 +31,29 @@ def run(spatial: chorus.Proxy, main_thread):
     logger.info("Running PPitW")
 
     pres_slide_img_id = None
+    active_id = None
+
+    height = main_thread.ask.winfo_reqheight()
+    width = main_thread.ask.winfo_reqwidth()
+
+    active_slide_area, _indicies = ordered_rectangle(
+        Polygon(
+            [
+                Point(width // 2, height // 2),
+                Point(width, height // 2),
+                Point(width, height),
+                Point(width // 2, height),
+            ]
+        ),
+        Point(width // 2, height // 2),
+    )
 
     # Handle messages
     while True:
+        logger.info("Drawing Active Area")
+        if active_id is None:
+            active_id = create_polygon(main_thread, active_slide_area)
+
         logger.info("Detecting slides")
 
         _, frame = chorus.receive(lambda m: m[0] == "frame")
@@ -50,12 +72,14 @@ def run(spatial: chorus.Proxy, main_thread):
             logger.info("no slides")
             continue
 
-        logger.info("adding image")
+        logger.info("Drawing Slide")
 
-        if pres_slide_img_id is None:
-            pres_slide_img_id = create_image(main_thread, slides[0])
-        else:
-            update_image(main_thread, slides[0], pres_slide_img_id)
+        # When do I show a slide? How do I know if its in the "active area"
+        if slides[0].area_camera.is_in(active_slide_area):
+            if pres_slide_img_id is None:
+                pres_slide_img_id = create_image(main_thread, slides[0])
+            else:
+                update_image(main_thread, slides[0], pres_slide_img_id)
 
         for slide in slides:
             assert slide.slide_content is not None
