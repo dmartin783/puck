@@ -3,9 +3,6 @@ import tkinter as tk
 from dataclasses import dataclass
 from tkinter import Canvas
 
-import cv2 as cv
-from cv2.typing import MatLike
-
 from puck.programs.ppitw.slide import Slide
 
 logger = logging.getLogger(__name__)

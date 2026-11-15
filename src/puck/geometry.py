@@ -118,17 +118,15 @@ class Polygon:
 
     def is_in(self, other: Polygon) -> bool:
         """
-        Answers the question of if "other" poygon is inside "self" polygon
+        Answers the question of if "self" poygon is inside "other" polygon
         """
         if type(other) != Polygon:
             raise ValueError(f"other should be a Polygon, not {type(other)}")
 
         # Maybe look at https://winter.dev/articles/gjk-algorithm/
 
-        # print(f"slide area: {self.points = }\nslide: {other.points = }")
-
         # in the meantime, a polygon is inside another iff all points in the inner polygon are inside the outer
-        return all(self.is_point_in(p) for p in other.points)
+        return all(other.is_point_in(p) for p in self.points)
 
     @classmethod
     def from_array(cls, array: np.ndarray) -> Polygon:

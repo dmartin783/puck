@@ -17,7 +17,6 @@ from ...spatial.api import (
     update_image,
     update_polygon,
 )
-from . import presentation
 from .slide import Slide
 from .slide_detection import detect_active_area_tags, get_slides
 
@@ -99,7 +98,7 @@ def run(spatial: chorus.Proxy, main_thread):
         # When do I show a slide? How do I know if its in the "active area"
 
         for slide in slides:
-            if active_slide_area.is_in(slide.area_camera):
+            if slide.area_camera.is_in(active_slide_area):
                 logger.info(f"Showing new slide {slide.id}")
                 if pres_slide_img_id is None:
                     pres_slide_img_id = create_image(main_thread, slide)

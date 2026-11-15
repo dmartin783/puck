@@ -1,13 +1,11 @@
 # Setup tkinter early (necessary on MacOS).
 import tkinter as tk
 from dataclasses import dataclass
-from queue import Queue
 from tkinter import Canvas, Tk
 
 from cv2.typing import MatLike
 
 from puck.programs.ppitw.presentation import PresView
-from puck.programs.ppitw.slide import Slide
 
 base = Tk()
 pres_topLevel = tk.Toplevel(base)
@@ -140,32 +138,6 @@ class FrameGetter:
         return self.frame
 
 
-# @dataclass
-# class PresView:
-#     canvas: Canvas
-#
-#     def set_slide(self, slide: Slide) -> int:
-#         logger.info("called set_slide")
-#         assert slide.slide_content is not None
-#         logger.info(f"{slide.slide_content_tk = }")
-#         img_id = self.canvas.create_image(
-#             0,
-#             0,
-#             anchor=tk.NW,
-#             image=slide.slide_content_tk,
-#         )
-#         self.canvas.image = slide.slide_content_tk
-#
-#         logger.info(f"{img_id = }")
-#         return img_id
-#
-#     def update_slide(self, slide: Slide, id: int):
-#         self.canvas.itemconfig(id, image=slide.slide_content_tk)
-#         self.canvas.image = slide.slide_content_tk
-#         return id
-#
-
-
 def start_puck(
     log: bool = True,
     log_level: int = 20,
@@ -193,8 +165,6 @@ def start_puck(
     spatial_model = chorus.spawn_server_with_proxy([SpatialModel(main=chorus.me())])
 
     chorus.process_pending([canvas, pres_view, frame_getter])
-
-    pres_draw_queue = Queue()
 
     # Start the main update loop soons
     base.after(
