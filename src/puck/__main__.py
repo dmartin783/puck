@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from queue import Queue
 from tkinter import Canvas, Tk
 
-from PIL import Image, ImageTk
+from cv2.typing import MatLike
 
 from puck.programs.ppitw.slide import Slide
 
@@ -20,9 +20,6 @@ import chorus
 import cv2 as cv
 import numpy as np
 import typer
-from numpy.typing import NDArray
-
-from .calibration.calibrate import CalibrationInfo, calibrate
 
 # Local packages and modules
 from .camera_processor import camera_setup, process_frame, show_camera_pov
@@ -75,6 +72,7 @@ def update(
     cam: cv.VideoCapture,
     canvas: Canvas,
     pres_view: PresView,
+    frame_getter: FrameGetter,
     homography_matrix: np.ndarray,
     spatial_model: SpatialModel,
 ) -> None:
@@ -86,6 +84,8 @@ def update(
     show_camera_pov(frame)
 
     assert frame is not None
+
+    frame_getter.frame = frame.copy()
 
     # Recognise and execute papers
     paper_records = [
@@ -103,13 +103,13 @@ def update(
     if aids:
         ppitw_aid = aids[3]
         # logger.info(f"{ppitw_aid = }")
-        chorus.send(ppitw_aid, ("frame", frame))
+        # chorus.send(ppitw_aid, ("frame", frame))
         global SENT_HOMOGRAPHY_MATRIX
         if not SENT_HOMOGRAPHY_MATRIX:
             chorus.send(ppitw_aid, ("h_mat", homography_matrix))
             SENT_HOMOGRAPHY_MATRIX = True
 
-    chorus.process_pending([canvas, pres_view])
+    chorus.process_pending([canvas, pres_view, frame_getter])
 
     # Handle quitting
     if cv.waitKey(1) == ord("q"):
@@ -125,9 +125,18 @@ def update(
         cam,
         canvas,
         pres_view,  # TODO :: HACKY
+        frame_getter,
         homography_matrix,
         spatial_model,
     )
+
+
+@dataclass
+class FrameGetter:
+    frame: MatLike | None = None
+
+    def get_frame(self) -> MatLike | None:
+        return self.frame
 
 
 @dataclass
@@ -171,13 +180,14 @@ def start_puck(
     canvas = canvas_setup(base)
     print(chorus.me())
     pres_view = PresView(canvas_setup(pres_topLevel))
+    frame_getter = FrameGetter()
 
     logger.info(f"{pres_view = }")
     #    return
     homography_matrix, cam = camera_setup(camera_id, camera_calibration)
     spatial_model = chorus.spawn_server_with_proxy([SpatialModel(main=chorus.me())])
 
-    chorus.process_pending([canvas, pres_view])
+    chorus.process_pending([canvas, pres_view, frame_getter])
 
     pres_draw_queue = Queue()
 
@@ -188,6 +198,7 @@ def start_puck(
         cam,
         canvas,
         pres_view,  # TODO :: HACKY
+        frame_getter,
         homography_matrix,
         spatial_model,
     )

@@ -3,6 +3,7 @@ import time
 
 import chorus
 import cv2 as cv
+import numpy as np
 from numpy.typing import NDArray
 from PIL import Image, ImageTk
 
@@ -39,29 +40,35 @@ def run(spatial: chorus.Proxy, main_thread):
     height = main_thread.ask.winfo_reqheight()
     width = main_thread.ask.winfo_reqwidth()
 
-    active_slide_area, _indicies = ordered_rectangle(
-        Polygon(
-            [
-                Point(width // 2, height // 2),
-                Point(width, height // 2),
-                Point(width, height),
-                Point(width // 2, height),
-            ]
-        ),
-        Point(width // 2, height // 2),
-    )
+    # active_slide_area, _indicies = ordered_rectangle(
+    #     Polygon(
+    #         [
+    #             Point(width // 2, height // 2),
+    #             Point(width, height // 2),
+    #             Point(width, height),
+    #             Point(width // 2, height),
+    #         ]
+    #     ),
+    #     Point(width // 2, height // 2),
+    # )
 
     _, homography_matrix = chorus.receive(lambda m: m[0] == "h_mat")
     logger.info(homography_matrix)
     logger.info(homography_matrix.T)
     h_inv = homography_matrix.T
 
-    _, frame = chorus.receive(lambda m: m[0] == "frame")
+    frame = None
 
-    active_slide_area = detect_active_area_tags(frame)
+    active_slide_area = None
+    while type(active_slide_area) != Polygon:
+        frame = main_thread.ask.get_frame()
+        active_slide_area = detect_active_area_tags(frame)
+
     assert type(active_slide_area) == Polygon
+    assert type(frame) is not None
 
     # Handle messages
+    n = 0
     while True:
         logger.info("Drawing Active Area")
         if active_id is None:
@@ -69,7 +76,11 @@ def run(spatial: chorus.Proxy, main_thread):
 
         logger.info("Detecting slides")
 
-        _, frame = chorus.receive(lambda m: m[0] == "frame")
+        # _, frame = chorus.receive(lambda m: m[0] == "frame")
+        frame = main_thread.ask.get_frame()
+
+        cv.imwrite(f"frame{2*n+1}.jpg", frame)
+        n += 1
 
         if frame is None:
             continue
@@ -100,7 +111,6 @@ def run(spatial: chorus.Proxy, main_thread):
                     ret = update_image(main_thread, slide, pres_slide_img_id)
                     logger.info(f"{ret = }")
 
-        time.sleep(1)
         # for slide in slides:
         #     assert slide.slide_content is not None
         #     cv.imwrite(f"content_{slide.id}.png", slide.slide_content)
