@@ -153,12 +153,15 @@ class PresView:
             anchor=tk.NW,
             image=slide.slide_content_tk,
         )
+        self.canvas.image = slide.slide_content_tk
 
         logger.info(f"{img_id = }")
         return img_id
 
     def update_slide(self, slide: Slide, id: int):
-        return self.canvas.itemconfig(id, image=slide.slide_content_tk)
+        self.canvas.itemconfig(id, image=slide.slide_content_tk)
+        self.canvas.image = slide.slide_content_tk
+        return id
 
 
 def start_puck(
