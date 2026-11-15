@@ -91,9 +91,11 @@ class Polygon:
         n_verts: int = len(verts)
         for n in range(n_verts):
             a, b = verts[n], verts[(n + 1) % n_verts]
-            affine_segment: Point = b - a
-            affine_point: Point = p - a
-            current_side = self.get_side(affine_segment, affine_point)
+            # print(f"{b = }, {a = }, {b - a = }, {p = }")
+            current_side = self.get_side(a, b, p)
+
+            # print(prev_side, current_side)
+
             if current_side is None:
                 return False  # outside polygon
             elif prev_side is None:  # First segement
@@ -104,11 +106,12 @@ class Polygon:
         return True
 
     # -- Takes 2 points which are actually vectors
-    def get_side(self, a: Point, b: Point):
-        x = a.x * b.y - a.y * b.x
-        if x < 0:
+    def get_side(self, a: Point, b: Point, p: Point):
+        d = (b.x - a.x) * (p.y - a.y) - (p.x - a.x) * (b.y - a.y)
+
+        if d < 0:
             return "LEFT"
-        elif x > 0:
+        elif d > 0:
             return "RIGHT"
         else:
             return None
@@ -121,6 +124,8 @@ class Polygon:
             raise ValueError(f"other should be a Polygon, not {type(other)}")
 
         # Maybe look at https://winter.dev/articles/gjk-algorithm/
+
+        # print(f"slide area: {self.points = }\nslide: {other.points = }")
 
         # in the meantime, a polygon is inside another iff all points in the inner polygon are inside the outer
         return all(self.is_point_in(p) for p in other.points)

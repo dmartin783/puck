@@ -33,6 +33,8 @@ logger = logging.getLogger(__name__)
 TICK_LENGTH = 1
 CANVAS_HEIGHT, CANVAS_WIDTH = 1080, 1920
 
+SENT_HOMOGRAPHY_MATRIX = False
+
 
 def logging_setup(log: bool, log_level: int) -> None:
     """Configure the logger.
@@ -97,11 +99,15 @@ def update(
     spatial_model.tell.update(paper_records)
 
     aids = spatial_model.ask.get_encoding_to_actor_id()
-    logger.info(f"{aids = }")
+    # logger.info(f"{aids = }")
     if aids:
         ppitw_aid = aids[3]
-        logger.info(f"{ppitw_aid = }")
+        # logger.info(f"{ppitw_aid = }")
         chorus.send(ppitw_aid, ("frame", frame))
+        global SENT_HOMOGRAPHY_MATRIX
+        if not SENT_HOMOGRAPHY_MATRIX:
+            chorus.send(ppitw_aid, ("h_mat", homography_matrix))
+            SENT_HOMOGRAPHY_MATRIX = True
 
     chorus.process_pending([canvas, pres_view])
 
@@ -143,7 +149,7 @@ class PresView:
         return img_id
 
     def update_slide(self, slide: Slide, id: int):
-        self.canvas.itemconfig(id, image=slide.slide_content_tk)
+        return self.canvas.itemconfig(id, image=slide.slide_content_tk)
 
 
 def start_puck(

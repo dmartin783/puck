@@ -25,6 +25,9 @@ class Slide:
         self._slide_content: MatLike | None = slide_content  # slide content image
         self.slide_content_tk: ImageTk | None = None
 
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(id: {self.id}, area_camera: {self.area_camera}, has_content: {self._slide_content is not None})"
+
     @property
     def slide_content(self) -> MatLike | None:
         return self._slide_content
@@ -36,3 +39,11 @@ class Slide:
         self.slide_content_tk = ImageTk.PhotoImage(
             Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
         )
+
+    @property
+    def top_left(self):
+        return self.area_camera[0]
+
+    @top_left.setter
+    def top_left(self, point: Point):
+        raise AttributeError("You cannot directly set top_left")
