@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 logger.level = 0
 
 SLIDE_TAGS = cv.aruco.getPredefinedDictionary(cv.aruco.DICT_APRILTAG_25H9)
+ACTIVE_AREA_TAGS = cv.aruco.getPredefinedDictionary(cv.aruco.DICT_APRILTAG_36H11)
 N_TAGS = 3
 
 __all__ = ["get_slides"]
@@ -48,6 +49,71 @@ def average_pt(tag: Polygon) -> Point:
         sum_x += x
         sum_y += y
     return Point(int(sum_x / 4), int(sum_y / 4))
+
+
+# TODO :: Temporary, remove when calibration works
+def detect_active_area_tags(frame: NDArray | None) -> Polygon | bool:
+    """Determines what slides are within a frame of video.
+
+    Currently we are just looking for one slide at a time.
+    This needs to be increased in newer implementations.
+
+    Args:
+        frame: a frame of the video feed.
+
+    Returns:
+        A list of slides
+    """
+    if frame is None:
+        logger.debug(f"{frame = }")
+        return False
+
+    april_tag_detector = cv.aruco.ArucoDetector(dictionary=ACTIVE_AREA_TAGS)
+    cv.cvtColor(frame, cv.COLOR_RGB2GRAY)
+
+    tags, ids, _ = april_tag_detector.detectMarkers(
+        frame,
+    )  # tags an Nx4 array where N is the number of tags
+    # logger.debug(f"{ids = }")
+
+    sketch = frame.copy()
+
+    cv.aruco.drawDetectedMarkers(sketch, tags, ids)
+
+    cv.imwrite("ActiveArea.jpg", sketch)
+
+    if ids is None or len(ids) % 4 != 0:
+        logger.warning("Not enough IDs")
+        return False
+
+    # ids[i] <=> tag_shapes[i]
+    tag_shapes = [Polygon.from_array(tag[0]) for tag in tags]
+    # ids[i] <=> ordered_tag_shapes[i]
+    ordered_tag_shapes_and_indicies: list[tuple[Polygon, list[int]]] = [
+        ordered_rectangle(tag_shape, tag_shape.points[0]) for tag_shape in tag_shapes
+    ]
+
+    ordered_tag_shapes: list[Polygon] = [
+        shape for shape, indicies in ordered_tag_shapes_and_indicies
+    ]
+
+    # TODO :: something about ids being included in `ordered_tag_shapes`
+    #         use to differentiate slides.
+
+    if len(tags) % 4 != 0:
+        logger.warning("Not enough tags")
+        return False
+
+    tags_pos: list[tuple[int, Point]] = []
+
+    for id, shape in zip(ids, ordered_tag_shapes):
+        tags_pos.append((id, average_pt(shape)))
+
+    active_area = Polygon([point for id, point in tags_pos])
+    logger.info(f"{active_area = }")
+    active_ordered, _ = ordered_rectangle(active_area, active_area.points[0])
+    logger.info(f"{active_ordered = }")
+    return active_ordered
 
 
 def detect_slide_tags(frame: NDArray | None) -> list[Slide] | bool:
@@ -167,7 +233,7 @@ def detect_slide_tags(frame: NDArray | None) -> list[Slide] | bool:
 
 
 # TODO :: TEST THIS !!!!!
-def align_and_crop_slide(slide: Slide, frame: MatLike) -> Slide:
+def align_and_crop_slide(slide: Slide, frame: MatLike) -> Slide | bool:
     slide_area = slide.area_camera
     if type(slide_area) != Polygon:
         raise ValueError(f"Slide area must have been found, area is {slide_area}")
@@ -261,7 +327,13 @@ def align_and_crop_slide(slide: Slide, frame: MatLike) -> Slide:
     ]  # TODO :: I think this is right
 
     x, y, _colour = cropped.shape
-    aspect_ratio = max(x / y, y / x)  # Get aspect ratio as (long slide / short side)
+    try:
+        aspect_ratio = max(
+            x / y, y / x
+        )  # Get aspect ratio as (long slide / short side)
+    except ZeroDivisionError:
+        logger.error(f"One of {x = }, {y = } is 0")
+        return False
 
     NEW_HEIGHT = 1080
     new_width = int(NEW_HEIGHT * aspect_ratio)
@@ -287,5 +359,13 @@ def get_slides(frame: MatLike) -> list[Slide] | bool:
 
     assert type(slides) == list
 
-    slides_and_content = [align_and_crop_slide(slide, frame) for slide in slides]
+    logger.info(f"{slides = }")
+
+    slides_and_content = [
+        v
+        for v in [align_and_crop_slide(slide, frame) for slide in slides]
+        if v != False
+    ]
+    assert all(type(slide) == Slide for slide in slides_and_content)
     return slides_and_content
+    # return {slide.id: slide for slide in slides_and_content}
