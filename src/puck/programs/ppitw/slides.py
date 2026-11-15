@@ -68,7 +68,6 @@ def run(spatial: chorus.Proxy, main_thread):
     assert type(frame) is not None
 
     # Handle messages
-    n = 0
     while True:
         logger.info("Drawing Active Area")
         if active_id is None:
@@ -78,9 +77,6 @@ def run(spatial: chorus.Proxy, main_thread):
 
         # _, frame = chorus.receive(lambda m: m[0] == "frame")
         frame = main_thread.ask.get_frame()
-
-        cv.imwrite(f"frame{2*n+1}.jpg", frame)
-        n += 1
 
         if frame is None:
             continue
