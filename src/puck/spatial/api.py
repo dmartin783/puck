@@ -33,4 +33,4 @@ def create_image(canvas: Proxy, slide: Slide) -> int:
 
 
 def update_image(main_thread: Proxy, slide: Slide, id: int):
-    main_thread.tell.update_slide(slide, id)
+    return main_thread.ask.update_slide(slide, id)

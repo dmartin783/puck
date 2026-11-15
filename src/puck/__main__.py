@@ -4,7 +4,10 @@ from dataclasses import dataclass
 from queue import Queue
 from tkinter import Canvas, Tk
 
+from cv2.typing import MatLike
+
 from puck.programs.ppitw.presentation import PresView
+from puck.programs.ppitw.slide import Slide
 
 base = Tk()
 pres_topLevel = tk.Toplevel(base)
@@ -27,6 +30,8 @@ from .spatial.spatial_model import PaperRecord, SpatialModel
 logger = logging.getLogger(__name__)
 TICK_LENGTH = 1
 CANVAS_HEIGHT, CANVAS_WIDTH = 1080, 1920
+
+SENT_HOMOGRAPHY_MATRIX = False
 
 
 def logging_setup(log: bool, log_level: int) -> None:
@@ -68,6 +73,7 @@ def update(
     cam: cv.VideoCapture,
     canvas: Canvas,
     pres_view: PresView,
+    frame_getter: FrameGetter,
     homography_matrix: np.ndarray,
     spatial_model: SpatialModel,
 ) -> None:
@@ -79,6 +85,8 @@ def update(
     show_camera_pov(frame)
 
     assert frame is not None
+
+    frame_getter.frame = frame.copy()
 
     # Recognise and execute papers
     paper_records = [
@@ -92,13 +100,17 @@ def update(
     spatial_model.tell.update(paper_records)
 
     aids = spatial_model.ask.get_encoding_to_actor_id()
-    logger.info(f"{aids = }")
+    # logger.info(f"{aids = }")
     if aids:
         ppitw_aid = aids[3]
-        logger.info(f"{ppitw_aid = }")
-        chorus.send(ppitw_aid, ("frame", frame))
+        # logger.info(f"{ppitw_aid = }")
+        # chorus.send(ppitw_aid, ("frame", frame))
+        global SENT_HOMOGRAPHY_MATRIX
+        if not SENT_HOMOGRAPHY_MATRIX:
+            chorus.send(ppitw_aid, ("h_mat", homography_matrix))
+            SENT_HOMOGRAPHY_MATRIX = True
 
-    chorus.process_pending([canvas, pres_view])
+    chorus.process_pending([canvas, pres_view, frame_getter])
 
     # Handle quitting
     if cv.waitKey(1) == ord("q"):
@@ -114,9 +126,44 @@ def update(
         cam,
         canvas,
         pres_view,  # TODO :: HACKY
+        frame_getter,
         homography_matrix,
         spatial_model,
     )
+
+
+@dataclass
+class FrameGetter:
+    frame: MatLike | None = None
+
+    def get_frame(self) -> MatLike | None:
+        return self.frame
+
+
+# @dataclass
+# class PresView:
+#     canvas: Canvas
+#
+#     def set_slide(self, slide: Slide) -> int:
+#         logger.info("called set_slide")
+#         assert slide.slide_content is not None
+#         logger.info(f"{slide.slide_content_tk = }")
+#         img_id = self.canvas.create_image(
+#             0,
+#             0,
+#             anchor=tk.NW,
+#             image=slide.slide_content_tk,
+#         )
+#         self.canvas.image = slide.slide_content_tk
+#
+#         logger.info(f"{img_id = }")
+#         return img_id
+#
+#     def update_slide(self, slide: Slide, id: int):
+#         self.canvas.itemconfig(id, image=slide.slide_content_tk)
+#         self.canvas.image = slide.slide_content_tk
+#         return id
+#
 
 
 def start_puck(
@@ -138,13 +185,14 @@ def start_puck(
     canvas = canvas_setup(base)
     print(chorus.me())
     pres_view = PresView(canvas_setup(pres_topLevel))
+    frame_getter = FrameGetter()
 
     logger.info(f"{pres_view = }")
     #    return
     homography_matrix, cam = camera_setup(camera_id, camera_calibration)
     spatial_model = chorus.spawn_server_with_proxy([SpatialModel(main=chorus.me())])
 
-    chorus.process_pending([canvas, pres_view])
+    chorus.process_pending([canvas, pres_view, frame_getter])
 
     pres_draw_queue = Queue()
 
@@ -155,6 +203,7 @@ def start_puck(
         cam,
         canvas,
         pres_view,  # TODO :: HACKY
+        frame_getter,
         homography_matrix,
         spatial_model,
     )

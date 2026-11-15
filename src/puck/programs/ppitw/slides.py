@@ -1,8 +1,14 @@
 import logging
+import time
 
 import chorus
 import cv2 as cv
+import numpy as np
+from numpy.typing import NDArray
 from PIL import Image, ImageTk
+
+from puck.camera_processor import transform_shape
+from puck.geometry import Point, Polygon, ordered_rectangle
 
 from ...spatial.api import (
     corners,
@@ -13,7 +19,7 @@ from ...spatial.api import (
 )
 from . import presentation
 from .slide import Slide
-from .slide_detection import get_slides
+from .slide_detection import detect_active_area_tags, get_slides
 
 logger = logging.getLogger(__name__)
 
@@ -29,12 +35,48 @@ def run(spatial: chorus.Proxy, main_thread):
     logger.info("Running PPitW")
 
     pres_slide_img_id = None
+    active_id = None
+
+    height = main_thread.ask.winfo_reqheight()
+    width = main_thread.ask.winfo_reqwidth()
+
+    # active_slide_area, _indicies = ordered_rectangle(
+    #     Polygon(
+    #         [
+    #             Point(width // 2, height // 2),
+    #             Point(width, height // 2),
+    #             Point(width, height),
+    #             Point(width // 2, height),
+    #         ]
+    #     ),
+    #     Point(width // 2, height // 2),
+    # )
+
+    _, homography_matrix = chorus.receive(lambda m: m[0] == "h_mat")
+    logger.info(homography_matrix)
+    logger.info(homography_matrix.T)
+    h_inv = homography_matrix.T
+
+    frame = None
+
+    active_slide_area = None
+    while type(active_slide_area) != Polygon:
+        frame = main_thread.ask.get_frame()
+        active_slide_area = detect_active_area_tags(frame)
+
+    assert type(active_slide_area) == Polygon
+    assert type(frame) is not None
 
     # Handle messages
     while True:
+        logger.info("Drawing Active Area")
+        if active_id is None:
+            active_id = create_polygon(main_thread, active_slide_area)
+
         logger.info("Detecting slides")
 
-        _, frame = chorus.receive(lambda m: m[0] == "frame")
+        # _, frame = chorus.receive(lambda m: m[0] == "frame")
+        frame = main_thread.ask.get_frame()
 
         if frame is None:
             continue
@@ -50,13 +92,21 @@ def run(spatial: chorus.Proxy, main_thread):
             logger.info("no slides")
             continue
 
-        logger.info("adding image")
+        logger.info(slides)
 
-        if pres_slide_img_id is None:
-            pres_slide_img_id = create_image(main_thread, slides[0])
-        else:
-            update_image(main_thread, slides[0], pres_slide_img_id)
+        logger.info("Drawing Slide")
+
+        # When do I show a slide? How do I know if its in the "active area"
 
         for slide in slides:
-            assert slide.slide_content is not None
-            cv.imwrite(f"content_{slide.id}.png", slide.slide_content)
+            if active_slide_area.is_in(slide.area_camera):
+                logger.info(f"Showing new slide {slide.id}")
+                if pres_slide_img_id is None:
+                    pres_slide_img_id = create_image(main_thread, slide)
+                else:
+                    ret = update_image(main_thread, slide, pres_slide_img_id)
+                    logger.info(f"{ret = }")
+
+        # for slide in slides:
+        #     assert slide.slide_content is not None
+        #     cv.imwrite(f"content_{slide.id}.png", slide.slide_content)

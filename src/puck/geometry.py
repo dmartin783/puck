@@ -81,6 +81,55 @@ class Polygon:
         """Returns all points as a list of the form [x1, y1, x2, y2, ...]"""
         return list(sum(self.unwrap(), ()))
 
+    def is_point_in(self, p: Point) -> bool:
+        """
+        Assumming self is clockwise wound (as generated from `ordered_rectangle()`
+        """
+        # adapted from: https://stackoverflow.com/questions/1119627/how-to-test-if-a-point-is-inside-of-a-convex-polygon-in-2d-integer-coordinates
+        prev_side = None
+        verts: list[Point] = self.points
+        n_verts: int = len(verts)
+        for n in range(n_verts):
+            a, b = verts[n], verts[(n + 1) % n_verts]
+            # print(f"{b = }, {a = }, {b - a = }, {p = }")
+            current_side = self.get_side(a, b, p)
+
+            # print(prev_side, current_side)
+
+            if current_side is None:
+                return False  # outside polygon
+            elif prev_side is None:  # First segement
+                prev_side = current_side
+            elif prev_side != current_side:  # Swapped side, point outside polygon
+                return False
+
+        return True
+
+    # -- Takes 2 points which are actually vectors
+    def get_side(self, a: Point, b: Point, p: Point):
+        d = (b.x - a.x) * (p.y - a.y) - (p.x - a.x) * (b.y - a.y)
+
+        if d < 0:
+            return "LEFT"
+        elif d > 0:
+            return "RIGHT"
+        else:
+            return None
+
+    def is_in(self, other: Polygon) -> bool:
+        """
+        Answers the question of if "other" poygon is inside "self" polygon
+        """
+        if type(other) != Polygon:
+            raise ValueError(f"other should be a Polygon, not {type(other)}")
+
+        # Maybe look at https://winter.dev/articles/gjk-algorithm/
+
+        # print(f"slide area: {self.points = }\nslide: {other.points = }")
+
+        # in the meantime, a polygon is inside another iff all points in the inner polygon are inside the outer
+        return all(self.is_point_in(p) for p in other.points)
+
     @classmethod
     def from_array(cls, array: np.ndarray) -> Polygon:
         points = [Point(int(item[0]), int(item[1])) for item in array]
