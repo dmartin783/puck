@@ -52,7 +52,9 @@ def average_pt(tag: Polygon) -> Point:
 
 
 # TODO :: Temporary, remove when calibration works
-def detect_active_area_tags(frame: NDArray | None) -> Polygon | bool:
+def detect_active_area_tags(
+    frame: NDArray | None, awful_overload_function_boolean: bool = False
+) -> Polygon | bool:
     """Determines what slides are within a frame of video.
 
     Currently we are just looking for one slide at a time.
@@ -82,6 +84,15 @@ def detect_active_area_tags(frame: NDArray | None) -> Polygon | bool:
 
     cv.imwrite("ActiveArea.jpg", sketch)
 
+    if not awful_overload_function_boolean:
+        id_tags = [[id, tag] for id, tag in zip(ids, tags) if id == 0]
+    else:
+        id_tags = [[id, tag] for id, tag in zip(ids, tags) if id != 0]
+
+    logger.info(f"{id_tags}")
+    ids = [v[0] for v in id_tags]
+    tags = [v[1] for v in id_tags]
+
     if ids is None or len(ids) % 4 != 0:
         logger.warning("Not enough IDs")
         return False
@@ -108,6 +119,9 @@ def detect_active_area_tags(frame: NDArray | None) -> Polygon | bool:
 
     for id, shape in zip(ids, ordered_tag_shapes):
         tags_pos.append((id, average_pt(shape)))
+
+    if awful_overload_function_boolean:
+        return tags_pos
 
     active_area = Polygon([point for id, point in tags_pos])
     logger.info(f"{active_area = }")

@@ -17,6 +17,7 @@ from ...spatial.api import (
     update_image,
     update_polygon,
 )
+from . import images
 from .slide import Slide
 from .slide_detection import detect_active_area_tags, get_slides
 
@@ -32,6 +33,9 @@ def run(spatial: chorus.Proxy, main_thread):
     """
 
     logger.info("Running PPitW")
+
+    # spawn thread to handle processing auxilliary image display
+    # images_id = chorus.spawn(images.images_main, chorus.me())
 
     pres_slide_img_id = None
     active_id = None
@@ -76,6 +80,7 @@ def run(spatial: chorus.Proxy, main_thread):
 
         # _, frame = chorus.receive(lambda m: m[0] == "frame")
         frame = main_thread.ask.get_frame()
+        # chorus.send(images_id, frame)
 
         if frame is None:
             continue
