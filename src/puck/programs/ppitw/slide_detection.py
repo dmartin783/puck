@@ -54,7 +54,7 @@ def average_pt(tag: Polygon) -> Point:
 # TODO :: Temporary, remove when calibration works
 def detect_active_area_tags(
     frame: NDArray | None, awful_overload_function_boolean: bool = False
-) -> Polygon | bool:
+) -> Polygon | bool | list[tuple[int, Point]]:
     """Determines what slides are within a frame of video.
 
     Currently we are just looking for one slide at a time.
@@ -93,7 +93,7 @@ def detect_active_area_tags(
     ids = [v[0] for v in id_tags]
     tags = [v[1] for v in id_tags]
 
-    if ids is None or len(ids) % 4 != 0:
+    if (ids is None or len(ids) % 4 != 0) and not awful_overload_function_boolean:
         logger.warning("Not enough IDs")
         return False
 
@@ -111,7 +111,7 @@ def detect_active_area_tags(
     # TODO :: something about ids being included in `ordered_tag_shapes`
     #         use to differentiate slides.
 
-    if len(tags) % 4 != 0:
+    if len(tags) % 4 != 0 and not awful_overload_function_boolean:
         logger.warning("Not enough tags")
         return False
 
@@ -154,7 +154,10 @@ def detect_slide_tags(frame: NDArray | None) -> list[Slide] | bool:
     )  # tags an Nx4 array where N is the number of tags
     # logger.debug(f"{ids = }")
 
-    if ids is None or len(ids) % N_TAGS != 0:
+    if ids is None:
+        return None  # No tags in image
+
+    if len(ids) % N_TAGS != 0:
         logger.warning("Not enough IDs")
         return False
 
@@ -368,6 +371,9 @@ def align_and_crop_slide(slide: Slide, frame: MatLike) -> Slide | bool:
 
 def get_slides(frame: MatLike) -> list[Slide] | bool:
     slides = detect_slide_tags(frame)
+    if slides is None:
+        return []
+
     if slides == False:
         return False
 

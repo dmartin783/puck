@@ -3,6 +3,8 @@ import tkinter as tk
 from dataclasses import dataclass
 from tkinter import Canvas
 
+from PIL import ImageTk
+
 from puck.programs.ppitw.slide import Slide
 
 logger = logging.getLogger(__name__)
@@ -30,4 +32,14 @@ class PresView:
     def update_slide(self, slide: Slide, id: int) -> int:
         self.canvas.itemconfig(id, image=slide.slide_content_tk)
         self.canvas.image = slide.slide_content_tk
+        return id
+
+    def set_image(self, image: ImageTk) -> int:
+        id = self.canvas.create_image(
+            0,
+            0,
+            anchor=tk.NW,
+            image=image,
+        )
+        self.canvas.image = image
         return id

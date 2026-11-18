@@ -1,3 +1,4 @@
+import json
 import logging
 import time
 
@@ -14,8 +15,9 @@ from ...spatial.api import (
     corners,
     create_image,
     create_polygon,
-    update_image,
+    create_slide,
     update_polygon,
+    update_slide,
 )
 from . import images
 from .slide import Slide
@@ -70,12 +72,16 @@ def run(spatial: chorus.Proxy, main_thread):
     assert type(active_slide_area) == Polygon
     assert type(frame) is not None
 
+    with open("data/linked_images.json") as f:
+        registered_image_paths = json.load(f)
+
     # Handle messages
     while True:
         logger.info("Drawing Active Area")
         if active_id is None:
             active_id = create_polygon(main_thread, active_slide_area)
 
+        logger.info(f"{registered_image_paths = }")
         logger.info("Detecting slides")
 
         # _, frame = chorus.receive(lambda m: m[0] == "frame")
@@ -94,21 +100,31 @@ def run(spatial: chorus.Proxy, main_thread):
         assert type(slides) == list
         if len(slides) == 0:
             logger.info("no slides")
-            continue
 
         logger.info(slides)
 
-        logger.info("Drawing Slide")
+        images = detect_active_area_tags(frame, awful_overload_function_boolean=True)
+        logger.info(type(images))
+        assert type(images) == list
+        logger.info(images)
+        if len(images) != 0:
+            img_ids = [v[0] for v in images]
+            images_2 = [Image.open(registered_image_paths[id]) for id in img_ids]
+            for img in images_2:
+                img.thumbnail((1920, 1080))
+            active_images = [ImageTk.PhotoImage(img) for img in images_2]
+            logger.info(active_images)
+            create_image(main_thread, active_images[0])
 
-        # When do I show a slide? How do I know if its in the "active area"
+        logger.info("Drawing Slide")
 
         for slide in slides:
             if slide.area_camera.is_in(active_slide_area):
                 logger.info(f"Showing new slide {slide.id}")
                 if pres_slide_img_id is None:
-                    pres_slide_img_id = create_image(main_thread, slide)
+                    pres_slide_img_id = create_slide(main_thread, slide)
                 else:
-                    ret = update_image(main_thread, slide, pres_slide_img_id)
+                    ret = update_slide(main_thread, slide, pres_slide_img_id)
                     logger.info(f"{ret = }")
 
         # for slide in slides:

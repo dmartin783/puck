@@ -24,7 +24,12 @@ def update_polygon(canvas: Proxy, graphical_id: int, polygon: Polygon):
     canvas.tell.coords(graphical_id, points)
 
 
-def create_image(canvas: Proxy, slide: Slide) -> int:
+def create_image(canvas: Proxy, image: ImageTk) -> int:
+    return canvas.ask.set_image(image)
+
+
+# combine the 2 below into 1 function for ease of use
+def create_slide(canvas: Proxy, slide: Slide) -> int:
     # image_id: int = canvas.ask.create_image(
     #     0, 0, image=slide.slide_content_tk, anchor=tk.NW
     # )
@@ -32,5 +37,5 @@ def create_image(canvas: Proxy, slide: Slide) -> int:
     return image_id
 
 
-def update_image(main_thread: Proxy, slide: Slide, id: int):
+def update_slide(main_thread: Proxy, slide: Slide, id: int):
     return main_thread.ask.update_slide(slide, id)
